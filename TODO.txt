@@ -1,0 +1,6 @@
+Does smbus_readblock work?   Does it need a size argument?
+
+busy_loop should (optionally) provide some stats - running average,
+difference from last count, running average of differences
+
+Runon should be made safe for > 64 CPUs
