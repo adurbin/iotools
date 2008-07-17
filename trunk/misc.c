@@ -88,23 +88,13 @@ rdtsc(int argc, const char *argv[], const struct cmd_info *info)
 }
 
 static int
-cpuid(int argc, const char *argv[], const struct cmd_info *info)
+cpuid_file(int cpu, unsigned long function, unsigned long index, uint32_t *data)
 {
-	off_t function;
-	off_t index;
-	off_t offset;
-	int cpu;
-	uint32_t data[4];
-	char dev[512];
 	int fd;
+	off_t offset;
+	char dev[512];
 
-	cpu = strtol(argv[1], NULL, 0);
-	function = strtoul(argv[2], NULL, 0);
-	index = 0;
-	if (argc == 4) {
-		index = strtoul(argv[3], NULL, 0);
-	}
-	offset = (index << 32) | function;
+	offset = ((off_t)index << 32) | function;
 
 	snprintf(dev, sizeof(dev), "/dev/cpu/%d/cpuid", cpu);
 	fd = open(dev, O_RDONLY);
@@ -120,12 +110,35 @@ cpuid(int argc, const char *argv[], const struct cmd_info *info)
 		return EXIT_FAILURE;
 	}
 
-	if (read(fd, &data, sizeof(data)) != sizeof(data)) {
+	if (read(fd, data, 4*sizeof(*data)) != 4*sizeof(*data)) {
 		fprintf(stderr, "read(): %s\n", strerror(errno));
 		close(fd);
 		return EXIT_FAILURE;
 	}
+
 	close(fd);
+
+	return EXIT_SUCCESS;
+}
+
+static int
+cpuid(int argc, const char *argv[], const struct cmd_info *info)
+{
+	unsigned long function;
+	unsigned long index;
+	int cpu;
+	uint32_t data[4];
+
+	cpu = strtol(argv[1], NULL, 0);
+	function = strtoul(argv[2], NULL, 0);
+	index = 0;
+	if (argc == 4) {
+		index = strtoul(argv[3], NULL, 0);
+	}
+
+	if (cpuid_file(cpu, function, index, data) != EXIT_SUCCESS) {
+		return EXIT_FAILURE;
+	}
 
 	printf("0x%08x 0x%08x 0x%08x 0x%08x\n",
 	       data[0], data[1], data[2], data[3]);
