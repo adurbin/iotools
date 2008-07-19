@@ -104,7 +104,7 @@ rdtsc(int argc, const char *argv[], const struct cmd_info *info)
 	return 0;
 }
 
-/* On new kernel2 (> 2.6.24) the index can be encoded into the offset of file
+/* On new kernels (>= 2.6.24) the index can be encoded into the offset of file
  * when reading /dev/cpu/X/cpuid. Because of this limitation on older kernels
  * implement a workaround that executes the cpuid instruction in userspace. */
 #ifndef CPUID_IN_USERSPACE
