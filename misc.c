@@ -104,13 +104,6 @@ rdtsc(int argc, const char *argv[], const struct cmd_info *info)
 	return 0;
 }
 
-/* On new kernels (>= 2.6.24) the index can be encoded into the offset of file
- * when reading /dev/cpu/X/cpuid. Because of this limitation on older kernels
- * implement a workaround that executes the cpuid instruction in userspace. */
-#ifndef CPUID_IN_USERSPACE
-#define CPUID_IN_USERSPACE 1
-#endif
-
 static int
 cpuid_inline(int cpu, int function, int index, uint32_t *data)
 {
@@ -130,47 +123,12 @@ cpuid_inline(int cpu, int function, int index, uint32_t *data)
 }
 
 static int
-cpuid_file(int cpu, int function, int index, uint32_t *data)
-{
-	int fd;
-	off_t offset;
-	char dev[512];
-
-	offset = ((off_t)index << 32) | function;
-
-	snprintf(dev, sizeof(dev), "/dev/cpu/%d/cpuid", cpu);
-	fd = open(dev, O_RDONLY);
-	if (fd < 0) {
-		fprintf(stderr, "open(\"%s\"): %s\n", dev, strerror(errno));
-		return -1;
-	}
-
-	if (lseek(fd, offset, SEEK_SET) == (off_t)-1) {
-		fprintf(stderr, "lseek(%llu): %s\n",
-		        (unsigned long long)offset, strerror(errno));
-		close(fd);
-		return -1;
-	}
-
-	if (read(fd, data, 4*sizeof(*data)) != 4*sizeof(*data)) {
-		fprintf(stderr, "read(): %s\n", strerror(errno));
-		close(fd);
-		return -1;
-	}
-
-	close(fd);
-
-	return 0;
-}
-
-static int
 cpuid(int argc, const char *argv[], const struct cmd_info *info)
 {
 	unsigned long function;
 	unsigned long index;
 	int cpu;
 	uint32_t data[4];
-	int (*do_cpuid)(int cpu, int function, int index, uint32_t *data);
 
 	cpu = strtol(argv[1], NULL, 0);
 	function = strtoul(argv[2], NULL, 0);
@@ -179,9 +137,7 @@ cpuid(int argc, const char *argv[], const struct cmd_info *info)
 		index = strtoul(argv[3], NULL, 0);
 	}
 
-	do_cpuid = (CPUID_IN_USERSPACE) ? &cpuid_inline : &cpuid_file;
-
-	if ((*do_cpuid)(cpu, function, index, data) < 0) {
+	if (cpuid_inline(cpu, function, index, data) < 0) {
 		fprintf(stderr, "Could not obtain cpuid result.\n");
 		return -1;
 	}
