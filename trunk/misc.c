@@ -67,7 +67,7 @@ busy_loop(int argc, const char *argv[], const struct cmd_info *info)
 		}
 	}
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 #define rdtscll(val) do { \
@@ -84,7 +84,7 @@ rdtsc(int argc, const char *argv[], const struct cmd_info *info)
 	rdtscll(tsc);
 	printf("0x%016llx\n", tsc);
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 static int
@@ -100,25 +100,25 @@ cpuid_file(int cpu, unsigned long function, unsigned long index, uint32_t *data)
 	fd = open(dev, O_RDONLY);
 	if (fd < 0) {
 		fprintf(stderr, "open(\"%s\"): %s\n", dev, strerror(errno));
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	if (lseek(fd, offset, SEEK_SET) == (off_t)-1) {
 		fprintf(stderr, "lseek(%llu): %s\n",
 		        (unsigned long long)offset, strerror(errno));
 		close(fd);
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	if (read(fd, data, 4*sizeof(*data)) != 4*sizeof(*data)) {
 		fprintf(stderr, "read(): %s\n", strerror(errno));
 		close(fd);
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	close(fd);
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 static int
@@ -136,14 +136,14 @@ cpuid(int argc, const char *argv[], const struct cmd_info *info)
 		index = strtoul(argv[3], NULL, 0);
 	}
 
-	if (cpuid_file(cpu, function, index, data) != EXIT_SUCCESS) {
-		return EXIT_FAILURE;
+	if (cpuid_file(cpu, function, index, data) < 0) {
+		return -1;
 	}
 
 	printf("0x%08x 0x%08x 0x%08x 0x%08x\n",
 	       data[0], data[1], data[2], data[3]);
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 /*
@@ -174,7 +174,7 @@ runon(int argc, const char *argv[], const struct cmd_info *info)
 	CPU_SET(cpu, &cpuset);
 	if (sched_setaffinity(getpid(), sizeof(cpuset), &cpuset) < 0) {
 		perror("sched_setaffinity()");
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	/* load the target */
@@ -183,7 +183,7 @@ runon(int argc, const char *argv[], const struct cmd_info *info)
 	/* if we get here, we didn't exec... */
 	perror("exec");
 
-	return EXIT_FAILURE;
+	return -1;
 }
 
 MAKE_PREREQ_PARAMS_VAR_ARGS(cpuid_params, 3, 4, "<cpu> <function> [index]", 0);

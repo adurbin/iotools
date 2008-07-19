@@ -60,28 +60,28 @@ check_prereqs(int argc, const char *argv[], const struct prereq_params *params)
 {
 	/* If there are no prerequisites the check has succeeded. */
 	if (params == NULL) {
-		return EXIT_SUCCESS;
+		return 0;
 	}
 
 	if (argc < params->min_args || argc > params->max_args) {
 		fprintf(stderr, "usage: %s %s\n", argv[0], params->usage);
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	/* If iopl_needed is non-zero attempt to change to iopl. */
 	if (params->iopl_needed != 0 && iopl(params->iopl_needed) < 0) {
 		fprintf(stderr, "can't set io privilege level\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 static int
 _run_command(int argc, const char *argv[], const struct cmd_info *cmd_info)
 {
-	if (check_prereqs(argc, argv, cmd_info->params) == EXIT_FAILURE) {
-		return EXIT_FAILURE;
+	if (check_prereqs(argc, argv, cmd_info->params) < 0) {
+		return -1;
 	}
 
 	return cmd_info->entry(argc, argv, cmd_info);
@@ -126,7 +126,7 @@ locate_path_of_binary(char **path_to_bin, char **bin_name)
 	/* Find the location of the currently executing binary. */
 	if (readlink("/proc/self/exe", bin_fullpath, FILENAME_MAX) == -1) {
 		fprintf(stderr, "Unable to locate currently running binary.\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	lbin_name = strrchr(bin_fullpath, '/');
@@ -136,7 +136,7 @@ locate_path_of_binary(char **path_to_bin, char **bin_name)
 	*bin_name = lbin_name;
 	*path_to_bin = lpath_to_bin;
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 static const char *
@@ -156,8 +156,8 @@ make_command_links(void)
 	int i;
 	const struct cmd_group *group;
 
-	if (locate_path_of_binary(&path_to_bin, &bin_name) != EXIT_SUCCESS) {
-		return EXIT_FAILURE;
+	if (locate_path_of_binary(&path_to_bin, &bin_name) < 0) {
+		return -1;
 	}
 
 	for (group = group_head; group; group = group->next) {
@@ -176,7 +176,7 @@ make_command_links(void)
 		}
 	}
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 int
@@ -186,8 +186,8 @@ clean_command_links(void)
 	int i;
 	const struct cmd_group *group;
 
-	if (locate_path_of_binary(&path_to_bin, &bin_name) != EXIT_SUCCESS) {
-		return EXIT_FAILURE;
+	if (locate_path_of_binary(&path_to_bin, &bin_name) < 0) {
+		return -1;
 	}
 
 	for (group = group_head; group; group = group->next) {
@@ -207,7 +207,7 @@ clean_command_links(void)
 		}
 	}
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 int
@@ -225,7 +225,7 @@ list_commands(void)
 		}
 	}
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 int

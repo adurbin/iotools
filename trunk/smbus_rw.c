@@ -100,24 +100,24 @@ smbus_prologue(const char *argv[], struct smbus_op_params *params)
 {
 	if (parse_uint8(argv[1], &params->i2c_bus)) {
 		fprintf(stderr, "invalid adapter value\n");
-		return 0;
+		return -1;
 	}
 	if (parse_uint8(argv[2], &params->address)) {
 		fprintf(stderr, "invalid address value\n");
-		return 0;
+		return -1;
 	}
 	if (parse_uint8(argv[3], &params->reg)) {
 		fprintf(stderr, "invalid register value\n");
-		return 0;
+		return -1;
 	}
 
 	params->fd = open_i2c_slave(params->i2c_bus, params->address);
 	if (params->fd < 0) {
 		fprintf(stderr, "can't get slave\n");
-		return 0;
+		return -1;
 	}
 
-	return 1;
+	return 0;
 }
 
 static int
@@ -128,8 +128,8 @@ smbus_read(int argc, const char *argv[], const struct cmd_info *info)
 	const struct smbus_op *op =
 		(const struct smbus_op *)info->privdata;
 
-	if (!smbus_prologue(argv, &params)) {
-		return EXIT_FAILURE;
+	if (smbus_prologue(argv, &params) < 0) {
+		return -1;
 	}
 
 	ret = op->perform_op(&params, op);
@@ -159,7 +159,7 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 		break;
 	default:
 		fprintf(stderr, "Illegal SMBus size for read operation.\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	/* if result contains the number of bytes read; make sure it is >= 1
@@ -167,7 +167,7 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 	if (result < 0) {
 		fprintf(stderr, "can't read register 0x%02X, %s\n", params->reg,
 			strerror(errno));
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	/* print out the data read. */
@@ -188,7 +188,7 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 		break;
 	}
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 static int
@@ -253,13 +253,13 @@ smbus_write(int argc, const char *argv[], const struct cmd_info *info)
 	const struct smbus_op *op =
 		(const struct smbus_op *)info->privdata;
 
-	if (!smbus_prologue(argv, &params)) {
-		return EXIT_FAILURE;
+	if (smbus_prologue(argv, &params) < 0) {
+		return -1;
 	}
 
 	if (parse_io_width(argv[4], &params, op) < 0 ) {
 		fprintf(stderr, "invalid value to write\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	ret = op->perform_op(&params, op);
@@ -279,7 +279,7 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 	if (ioctl(params->fd, I2C_SLAVE_FORCE, params->address) < 0) {
 		fprintf(stderr, "can't set address 0x%02X, %s\n",
 		        params->address, strerror(errno));
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	switch (op->size) {
@@ -297,16 +297,16 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 		break;
 	default:
 		fprintf(stderr, "Illegal SMBus size for write operation.\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	if (result < 0) {
 		fprintf(stderr, "can't write register 0x%02X, %s\n",
 		        params->reg, strerror(errno));
-		return EXIT_FAILURE;
+		return -1;
 	}
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_read_params, 4,

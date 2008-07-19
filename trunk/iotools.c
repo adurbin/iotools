@@ -25,7 +25,8 @@
 int
 main(int argc, const char *argv[])
 {
-	exit(run_command(argc, argv));
+	int rc = run_command(argc, argv);
+	exit((rc < 0) ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 static void
@@ -43,7 +44,7 @@ iotools_fallback(int argc, const char *argv[])
 {
 	if (argc != 2) {
 		usage(argv);
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	if (strcmp(argv[1], "--make-links") == 0) {
@@ -60,5 +61,5 @@ iotools_fallback(int argc, const char *argv[])
 
 	fprintf(stderr, "'%s' sub-command not supported by iotools\n", argv[1]);
 	usage(argv);
-	return EXIT_FAILURE;
+	return -1;
 }

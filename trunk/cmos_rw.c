@@ -42,32 +42,32 @@ cmos_rd(int argc, const char *argv[], const struct cmd_info *info)
 	index = strtoul(argv[1], NULL, 0);
 	if (index < NVRAM_OFFSET) {
 		fprintf(stderr, "can't read bytes below %d\n", NVRAM_OFFSET);
-		return EXIT_FAILURE;
+		return -1;
 	}
 	index -= NVRAM_OFFSET;
 
 	fd = open(DEVICE, O_RDONLY);
 	if (fd < 0) {
 		fprintf(stderr, "open(\"%s\"): %s\n", DEVICE, strerror(errno));
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	if (lseek(fd, index, SEEK_SET) < 0) {
 		fprintf(stderr, "lseek(%lu): %s\n", index, strerror(errno));
 		close(fd);
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	if (read(fd, &data, sizeof(data)) != sizeof(data)) {
 		fprintf(stderr, "read(): %s\n", strerror(errno));
 		close(fd);
-		return EXIT_FAILURE;
+		return -1;
 	}
 	close(fd);
 
 	printf("0x%02x\n", data);
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 static int
@@ -81,7 +81,7 @@ cmos_wr(int argc, const char *argv[], const struct cmd_info *info)
 	index = strtoul(argv[1], NULL, 0);
 	if (index < NVRAM_OFFSET) {
 		fprintf(stderr, "can't read bytes below %d\n", NVRAM_OFFSET);
-		return EXIT_FAILURE;
+		return -1;
 	}
 	index -= NVRAM_OFFSET;
 	ldata = strtoul(argv[2], NULL, 0);
@@ -90,23 +90,23 @@ cmos_wr(int argc, const char *argv[], const struct cmd_info *info)
 	fd = open(DEVICE, O_WRONLY);
 	if (fd < 0) {
 		fprintf(stderr, "open(\"%s\"): %s\n", DEVICE, strerror(errno));
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	if (lseek(fd, index, SEEK_SET) < 0) {
 		fprintf(stderr, "lseek(%lu): %s\n", index, strerror(errno));
 		close(fd);
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	if (write(fd, &data, sizeof(data)) != sizeof(data)) {
 		fprintf(stderr, "write(): %s\n", strerror(errno));
 		close(fd);
-		return EXIT_FAILURE;
+		return -1;
 	}
 	close(fd);
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 MAKE_PREREQ_PARAMS_FIXED_ARGS(cmos_rd_params, 2, "<index>", 0);
