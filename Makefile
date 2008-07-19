@@ -34,7 +34,11 @@ CFLAGS = -Wall -Werror $(ARCHFLAGS) $(IOTOOLS_STATIC) $(IOTOOLS_DEBUG)
 SBINDIR ?= /usr/local/sbin
 
 BINARY=iotools
-OBJS=$(filter-out iotools.o, $(patsubst %.c,%.o,$(wildcard *.c)))
+OBJS_TO_BUILD=$(filter-out iotools.o, $(patsubst %.c,%.o,$(wildcard *.c)))
+#OBJS=$(OBJS_TO_BUILD)
+# temp workaround to not build smbus_rw because of issue:
+# http://code.google.com/p/iotools/issues/detail?id=1
+OBJS=$(filter-out smbus_rw.o, $(OBJS_TO_BUILD))
 
 all: $(BINARY)
 
