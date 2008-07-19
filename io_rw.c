@@ -28,7 +28,7 @@ io_read_x(int argc, const char *argv[], const struct cmd_info *info)
 	data_store data;
 	int ret;
 
-	ret = EXIT_SUCCESS;
+	ret = 0;
 	iobase = strtoul(argv[1], NULL, 0);
 
 	#define in8 inb
@@ -51,7 +51,7 @@ io_read_x(int argc, const char *argv[], const struct cmd_info *info)
 		break;
 	default:
 		fprintf(stderr, "invalid io_read entry\n");
-		ret = EXIT_FAILURE;
+		ret = -1;
 	}
 
 	return ret;
@@ -65,7 +65,7 @@ io_write_x(int argc, const char *argv[], const struct cmd_info *info)
 	int ret;
 	data_store data;
 
-	ret = EXIT_SUCCESS;
+	ret = 0;
 	iobase = strtoul(argv[1], NULL, 0);
 	ldata = strtoul(argv[2], NULL, 0);
 
@@ -88,7 +88,7 @@ io_write_x(int argc, const char *argv[], const struct cmd_info *info)
 		break;
 	default:
 		fprintf(stderr, "invalid io_write entry\n");
-		ret = EXIT_FAILURE;
+		ret = -1;
 	}
 
 	return ret;

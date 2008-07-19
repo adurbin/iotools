@@ -54,7 +54,7 @@ open_mapping(struct mmap_info *mmap_addr, int flags)
 	mmap_addr->fd = open("/dev/mem", flags);
 	if (mmap_addr->fd < 0) {
 		fprintf(stderr, "open(/dev/mem): %s\n", strerror(errno));
-		return 0;
+		return -1;
 	}
 
 	prot = 0;
@@ -72,10 +72,10 @@ open_mapping(struct mmap_info *mmap_addr, int flags)
 	if (!mmap_addr->mem || mmap_addr->mem == MAP_FAILED) {
 		fprintf(stderr, "mmap(/dev/mem): %s\n", strerror(errno));
 		close(mmap_addr->fd);
-		return 0;
+		return -1;
 	}
 
-	return 1;
+	return 0;
 }
 
 static void
@@ -94,11 +94,11 @@ mmio_read_x(int argc, const char *argv[], const struct cmd_info *info)
 
 	mmap_addr.addr = strtoull(argv[1], NULL, 0);
 
-	if (!open_mapping(&mmap_addr, O_RDONLY)) {
-		return EXIT_FAILURE;
+	if (open_mapping(&mmap_addr, O_RDONLY) < 0) {
+		return -1;
 	}
 
-	ret = EXIT_SUCCESS;
+	ret = 0;
 
 	#define DO_READ(mem_, off_, size_)\
 		data.u ##size_ = *(typeof(data.u ##size_) *)(mem_ + off_); \
@@ -117,7 +117,7 @@ mmio_read_x(int argc, const char *argv[], const struct cmd_info *info)
 		break;
 	default:
 		fprintf(stderr, "invalid mmio_read parameter\n");
-		ret = EXIT_FAILURE;
+		ret = -1;
 	}
 
 	close_mapping(&mmap_addr);
@@ -136,11 +136,11 @@ mmio_write_x(int argc, const char *argv[], const struct cmd_info *info)
 	mmap_addr.addr = strtoull(argv[1], NULL, 0);
 	ldata = strtoul(argv[2], NULL, 0);
 
-	if (!open_mapping(&mmap_addr, O_RDWR)) {
-		return EXIT_FAILURE;
+	if (open_mapping(&mmap_addr, O_RDWR) < 0) {
+		return -1;
 	}
 
-	ret = EXIT_SUCCESS;
+	ret = 0;
 
 	#define DO_WRITE(mem_, off_, size_)\
 		data.u ##size_ = (typeof(data.u ##size_))ldata;\
@@ -158,7 +158,7 @@ mmio_write_x(int argc, const char *argv[], const struct cmd_info *info)
 		break;
 	default:
 		fprintf(stderr, "invalid mmio_write parameter\n");
-		ret = EXIT_FAILURE;
+		ret = -1;
 	}
 
 	close_mapping(&mmap_addr);

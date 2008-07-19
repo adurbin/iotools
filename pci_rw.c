@@ -79,12 +79,12 @@ pci_read_x(int argc, const char *argv[], const struct cmd_info *info)
 
 	fd = open_device(bus, dev, func, O_RDONLY);
 	if (fd < 0) {
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	if (lseek(fd, reg, SEEK_SET) < 0) {
 		fprintf(stderr, "lseek(%u): %s\n", reg, strerror(errno));
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 
@@ -92,7 +92,7 @@ pci_read_x(int argc, const char *argv[], const struct cmd_info *info)
 		if (read(fd, &data.u ##size_, sizeof(data.u ##size_)) != \
 		    sizeof(data.u ##size_)) { \
 		    fprintf(stderr, "read(): %s\n", strerror(errno)); \
-		    return EXIT_FAILURE; \
+		    return -1; \
 		} \
 		fprintf(stdout, "0x%0*x\n", (int)sizeof(data.u ##size_)*2, \
 		       data.u ##size_)
@@ -109,12 +109,12 @@ pci_read_x(int argc, const char *argv[], const struct cmd_info *info)
 		break;
 	default:
 		fprintf(stderr, "invalid pci_read entry\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	close(fd);
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 static int
@@ -135,12 +135,12 @@ pci_write_x(int argc, const char *argv[], const struct cmd_info *info)
 	ldata = strtoul(argv[5], NULL, 0);
 
 	if ((fd = open_device(bus, dev, func, O_WRONLY)) < 0 ) {
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	if (lseek(fd, reg, SEEK_SET) < 0) {
 		fprintf(stderr, "lseek(%u): %s\n", reg, strerror(errno));
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 #define DO_WRITE(size_) \
@@ -149,7 +149,7 @@ pci_write_x(int argc, const char *argv[], const struct cmd_info *info)
 	if (write(fd, &data.u ##size_, sizeof(data.u ##size_)) != \
 	    sizeof(data.u ##size_)) { \
 		fprintf(stderr, "write(): %s\n", strerror(errno)); \
-		return EXIT_FAILURE;\
+		return -1;\
 	} \
 	} while (0)
 
@@ -165,12 +165,12 @@ pci_write_x(int argc, const char *argv[], const struct cmd_info *info)
 		break;
 	default:
 		fprintf(stderr, "invalid pci_read entry\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	close(fd);
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 MAKE_PREREQ_PARAMS_FIXED_ARGS(rd_params, 5, "<bus> <dev> <func> <reg>", 0);

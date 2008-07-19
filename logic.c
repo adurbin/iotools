@@ -76,7 +76,7 @@ logic_op(int argc, const char *argv[], const struct cmd_info *info)
 			break;
 		default:
 			fprintf(stderr, "Invalid logic op\n");
-			return EXIT_FAILURE;
+			return -1;
 		}
 		argc--; argv++;
 	}
@@ -118,11 +118,11 @@ shift(int argc, const char *argv[], const struct cmd_info *info)
 		break;
 	default:
 		fprintf(stderr, "Invalid shift operation\n");
-		return EXIT_FAILURE;
+		return -1;
 	}
 	printf("0x%llx\n", val);
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 MAKE_PREREQ_PARAMS_VAR_ARGS(logic_op_params, 2, INT_MAX,

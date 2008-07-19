@@ -40,13 +40,13 @@ open_and_seek(int cpu, unsigned long msr, int mode, int *fd)
 	*fd = open(dev, mode);
 	if (*fd < 0) {
 		fprintf(stderr, "open(\"%s\"): %s\n", dev, strerror(errno));
-		return 1;
+		return -1;
 	}
 
 	if (lseek(*fd, msr, SEEK_SET) == (off_t)-1) {
 		fprintf(stderr, "lseek(%lu): %s\n", msr, strerror(errno));
 		close(*fd);
-		return 1;
+		return -1;
 	}
 
 	return 0;
@@ -63,21 +63,21 @@ rd_msr(int argc, const char *argv[], const struct cmd_info *info)
 	cpu = strtol(argv[1], NULL, 0);
 	msr = strtoul(argv[2], NULL, 0);
 
-	if (open_and_seek(cpu, msr, O_RDONLY, &fd)) {
-		return EXIT_FAILURE;
+	if (open_and_seek(cpu, msr, O_RDONLY, &fd) < 0) {
+		return -1;
 	}
 
 	if (read(fd, &data, sizeof(data)) != sizeof(data)) {
 		fprintf(stderr, "read(): %s\n", strerror(errno));
 		close(fd);
-		return EXIT_FAILURE;
+		return -1;
 	}
 
 	close(fd);
 
 	printf("0x%016" PRIx64 "\n", data);
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 static int
@@ -87,19 +87,19 @@ wr_msr(int argc, const char *argv[], const struct cmd_info *info)
 	int cpu;
 	uint64_t data;
 	int fd;
-	int ret = EXIT_SUCCESS;
+	int ret = 0;
 
 	cpu = strtol(argv[1], NULL, 0);
 	msr = strtoul(argv[2], NULL, 0);
 	data = strtoull(argv[3], NULL, 0);
 
-	if (open_and_seek(cpu, msr, O_WRONLY, &fd)) {
-		return EXIT_FAILURE;
+	if (open_and_seek(cpu, msr, O_WRONLY, &fd) < 0) {
+		return -1;
 	}
 
 	if (write(fd, &data, sizeof(data)) != sizeof(data)) {
 		fprintf(stderr, "write(): %s\n", strerror(errno));
-		ret = EXIT_FAILURE;
+		ret = -1;
 	}
 
 	close(fd);
