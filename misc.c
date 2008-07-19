@@ -33,6 +33,23 @@
 #define __USE_GNU
 #include <sched.h>
 
+/* Helper function to set the affinity of the process to a given cpu. */
+static int
+set_cpu_affinity(int cpu)
+{
+	cpu_set_t cpuset;
+
+	/* run on the specified CPU */
+	CPU_ZERO(&cpuset);
+	CPU_SET(cpu, &cpuset);
+	if (sched_setaffinity(getpid(), sizeof(cpuset), &cpuset) < 0) {
+		perror("sched_setaffinity()");
+		return -1;
+	}
+
+	return 0;
+}
+
 static int
 busy_loop(int argc, const char *argv[], const struct cmd_info *info)
 {
@@ -160,7 +177,6 @@ static int
 runon(int argc, const char *argv[], const struct cmd_info *info)
 {
 	unsigned long cpu;
-	cpu_set_t cpuset;
 
 	/* strip program command line */
 	argc--; argv++;
@@ -170,10 +186,7 @@ runon(int argc, const char *argv[], const struct cmd_info *info)
 	argc--; argv++;
 
 	/* run on the specified CPU */
-	CPU_ZERO(&cpuset);
-	CPU_SET(cpu, &cpuset);
-	if (sched_setaffinity(getpid(), sizeof(cpuset), &cpuset) < 0) {
-		perror("sched_setaffinity()");
+	if (set_cpu_affinity(cpu) < 0) {
 		return -1;
 	}
 
