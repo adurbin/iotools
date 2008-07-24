@@ -28,9 +28,11 @@
 #include <errno.h>
 #include <string.h>
 #include <stdint.h>
+#include <sys/types.h>
+#include <dirent.h>
 #include "commands.h"
 
-#define PCI_BASE_DIR	"/proc/bus/pci"
+#define PROCFS_BASE_DIR	"/proc/bus/pci"
 #define SYSFS_BASE_DIR	"/sys/bus/pci/devices"
 
 static int
@@ -48,7 +50,7 @@ open_device(int bus, int device, int function, int mode)
 	/* If sysfs failed, try the proc filesystem. */
 	if (fd < 0) {
 		snprintf(filename, sizeof(filename), "%s/%02x/%02x.%x",
-		         PCI_BASE_DIR, bus, device, function);
+		         PROCFS_BASE_DIR, bus, device, function);
 		fd = open(filename, mode);
 	}
 
@@ -173,6 +175,78 @@ pci_write_x(int argc, const char *argv[], const struct cmd_info *info)
 	return 0;
 }
 
+static int
+pci_list_sysfs(void)
+{
+	DIR *dir = opendir(SYSFS_BASE_DIR);
+	struct dirent *de;
+
+	if (!dir) {
+		fprintf(stderr, "opendir(%s): %s\n",
+		        SYSFS_BASE_DIR, strerror(errno));
+		return -1;
+	}
+	while ((de = readdir(dir))) {
+		int seg, bus, dev, fun;
+		int r = sscanf(de->d_name, "%04x:%02x:%02x.%x",
+		               &seg, &bus, &dev, &fun);
+		if (r == 4) {
+			printf("%d %d %d\n", bus, dev, fun);
+		}
+	}
+	closedir(dir);
+	return 0;
+}
+
+static int
+pci_list_procfs(void)
+{
+	DIR *dir = opendir(PROCFS_BASE_DIR);
+	struct dirent *de;
+
+	if (!dir) {
+		fprintf(stderr, "opendir(%s): %s\n",
+		        PROCFS_BASE_DIR, strerror(errno));
+		return -1;
+	}
+	while ((de = readdir(dir))) {
+		int bus;
+		int r = sscanf(de->d_name, "%02x", &bus);
+		if (r == 1 && de->d_type == DT_DIR) {
+			char buf[1024];
+			snprintf(buf, sizeof(buf), "%s/%s",
+			         PROCFS_BASE_DIR, de->d_name);
+			DIR *subdir = opendir(buf);
+			struct dirent *subde;
+
+			if (!subdir) {
+				fprintf(stderr, "opendir(%s): %s\n",
+				        buf, strerror(errno));
+				return -1;
+			}
+			while ((subde = readdir(subdir))) {
+				int dev, fun;
+				r = sscanf(subde->d_name, "%02x.%x",
+				           &dev, &fun);
+				if (r == 2) {
+					printf("%d %d %d\n", bus, dev, fun);
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+static int
+pci_list(int argc, const char *argv[], const struct cmd_info *info)
+{
+	int ret = pci_list_sysfs();
+	if (ret < 0) {
+		ret = pci_list_procfs();
+	}
+	return ret;
+}
+
 MAKE_PREREQ_PARAMS_FIXED_ARGS(rd_params, 5, "<bus> <dev> <func> <reg>", 0);
 MAKE_PREREQ_PARAMS_FIXED_ARGS(wr_params, 6, "<bus> <dev> <func> <reg> <data>", 0);
 
@@ -190,6 +264,7 @@ static const struct cmd_info pci_cmds[] = {
 	MAKE_PCI_RW_CMD_PAIR(8),
 	MAKE_PCI_RW_CMD_PAIR(16),
 	MAKE_PCI_RW_CMD_PAIR(32),
+	MAKE_CMD(pci_list, pci_list, NULL),
 };
 
 MAKE_CMD_GROUP(PCI, "commands to access PCI registers", pci_cmds);
