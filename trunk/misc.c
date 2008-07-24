@@ -148,6 +148,18 @@ cpuid(int argc, const char *argv[], const struct cmd_info *info)
 	return 0;
 }
 
+static int
+cpu_list(int argc, const char *argv[], const struct cmd_info *info)
+{
+	int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
+	int i;
+
+	for (i = 0; i < ncpus; i++) {
+		printf("%d\n", i);
+	}
+	return 0;
+}
+
 /*
  * runon()
  *
@@ -190,6 +202,7 @@ MAKE_PREREQ_PARAMS_VAR_ARGS(runon_params, 3, INT_MAX, "<cpu> <cmd> [args]", 0);
 static const struct cmd_info misc_cmds[] = {
 	MAKE_CMD(rdtsc, rdtsc, NULL),
 	MAKE_CMD(busy_loop, &busy_loop, NULL),
+	MAKE_CMD(cpu_list, cpu_list, NULL),
 	MAKE_CMD_WITH_PARAMS(cpuid, cpuid, NULL, &cpuid_params),
 	MAKE_CMD_WITH_PARAMS(runon, &runon, NULL, &runon_params),
 };
