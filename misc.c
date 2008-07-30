@@ -30,7 +30,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "commands.h"
+#ifndef __USE_GNU
 #define __USE_GNU
+#endif
 #include <sched.h>
 
 /* Helper function to set the affinity of the process to a given cpu. */
