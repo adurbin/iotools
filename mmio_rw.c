@@ -51,7 +51,7 @@ open_mapping(struct mmap_info *mmap_addr, int flags)
 	mmap_addr->off = mmap_addr->addr & (mmap_addr->pgsize - 1);
 	mmap_addr->addr &= ~ ((uint64_t)mmap_addr->pgsize - 1);
 
-	mmap_addr->fd = open("/dev/mem", flags|O_DIRECT|O_SYNC);
+	mmap_addr->fd = open("/dev/mem", flags|O_SYNC);
 	if (mmap_addr->fd < 0) {
 		fprintf(stderr, "open(/dev/mem): %s\n", strerror(errno));
 		return -1;
