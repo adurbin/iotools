@@ -30,10 +30,10 @@ main(int argc, const char *argv[])
 }
 
 static void
-usage(const char *argv[])
+usage(const char *bin_name, FILE *fstream)
 {
-	fprintf(stderr, "usage: %s COMMAND\n", argv[0]);
-	fprintf(stderr, "  COMMANDS:\n"
+	fprintf(fstream, "usage: %s COMMAND\n", bin_name);
+	fprintf(fstream, "  COMMANDS:\n"
 			"    --make-links\n"
 			"    --clean-links\n"
 			"    --list-cmds\n");
@@ -43,8 +43,13 @@ int
 iotools_fallback(int argc, const char *argv[])
 {
 	if (argc != 2) {
-		usage(argv);
+		usage(argv[0], stderr);
 		return -1;
+	}
+
+	if (strcmp(argv[1], "--help") == 0) {
+		usage(argv[0], stdout);
+		return 0;
 	}
 
 	if (strcmp(argv[1], "--make-links") == 0) {
@@ -60,6 +65,6 @@ iotools_fallback(int argc, const char *argv[])
 	}
 
 	fprintf(stderr, "'%s' sub-command not supported by iotools\n", argv[1]);
-	usage(argv);
+	usage(argv[0], stderr);
 	return -1;
 }
