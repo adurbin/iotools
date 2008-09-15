@@ -36,7 +36,14 @@ usage(const char *bin_name, FILE *fstream)
 	fprintf(fstream, "  COMMANDS:\n"
 			"    --make-links\n"
 			"    --clean-links\n"
-			"    --list-cmds\n");
+			"    --list-cmds\n"
+			"    -v --version\n");
+}
+
+static void
+version(const char *progname)
+{
+	printf("%s version %d.%d\n", progname, VER_MAJOR, VER_MINOR);
 }
 
 int
@@ -62,6 +69,11 @@ iotools_fallback(int argc, const char *argv[])
 
 	if (strcmp(argv[1], "--list-cmds") == 0) {
 		return list_commands();
+	}
+
+	if (strcmp(argv[1], "-v") == 0 || strcmp(argv[1], "--version") == 0) {
+		version(argv[0]);
+		return 0;
 	}
 
 	fprintf(stderr, "'%s' sub-command not supported by iotools\n", argv[1]);

@@ -14,6 +14,9 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+VER_MAJOR = 1
+VER_MINOR = 0
+
 CC=$(CROSS_COMPILE)gcc
 
 # build options
@@ -31,7 +34,7 @@ IOTOOLS_DEBUG = -O2 -DNDEBUG
 endif
 
 CFLAGS = -Wall -Werror $(DEFS) $(ARCHFLAGS) $(IOTOOLS_STATIC) $(IOTOOLS_DEBUG)
-DEFS = -D_GNU_SOURCE
+DEFS = -D_GNU_SOURCE -DVER_MAJOR=$(VER_MAJOR) -DVER_MINOR=$(VER_MINOR)
 SBINDIR ?= /usr/local/sbin
 
 BINARY=iotools
