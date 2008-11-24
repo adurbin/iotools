@@ -180,13 +180,30 @@ mmio_dump(int argc, const char *argv[], const struct cmd_info *info)
 	uint32_t *addr;
 	uint64_t desired_addr;
 	int fields_on_line;
+	int write_binary;
 
 	desired_addr = strtoull(argv[1], NULL, 0);
 	bytes_to_dump = strtoul(argv[2], NULL, 0);
 
+	write_binary = 0;
+	if (argc == 4) {
+		if (!strcmp(argv[3], "-b")) {
+			write_binary = 1;
+		} else {
+			return -1;
+		}
+	}
+
 	mmap_addr.addr = desired_addr;
 	if (open_mapping(&mmap_addr, O_RDONLY, bytes_to_dump) < 0) {
 		return -1;
+	}
+
+	if (write_binary) {
+		void *buffer_to_write = (void *)mmap_addr.mem + mmap_addr.off;
+		fwrite(buffer_to_write, bytes_to_dump, 1, stdout);
+		close_mapping(&mmap_addr);
+		return 0;
 	}
 
 	addr = (void *)mmap_addr.mem + mmap_addr.off;
@@ -237,7 +254,7 @@ mmio_dump(int argc, const char *argv[], const struct cmd_info *info)
 
 MAKE_PREREQ_PARAMS_FIXED_ARGS(rd_params, 2, "<addr>", 0);
 MAKE_PREREQ_PARAMS_FIXED_ARGS(wr_params, 3, "<addr> <value>", 0);
-MAKE_PREREQ_PARAMS_FIXED_ARGS(dump_params, 3, "<addr> <num_bytes>", 0);
+MAKE_PREREQ_PARAMS_VAR_ARGS(dump_params, 3, 4, "<addr> <num_bytes> [-b]", 0);
 
 #define MAKE_MMIO_READ_CMD(size_) \
 	MAKE_CMD_WITH_PARAMS(mmio_read ##size_, &mmio_read_x, &size ##size_, \
