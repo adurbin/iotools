@@ -26,7 +26,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include "commands.h"
-#include <linux/i2c-dev.h>
+#include "linux-i2c-dev.h"
 
 enum SMBUS_SIZE
 {
@@ -288,7 +288,7 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 		             params->data.fixed.u8);
 		break;
 	case SMBUS_SIZE_16:
-		result = i2c_smbus_write_byte_data(params->fd, params->reg,
+		result = i2c_smbus_write_word_data(params->fd, params->reg,
 		             params->data.fixed.u16);
 		break;
 	case SMBUS_SIZE_BLOCK:
