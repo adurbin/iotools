@@ -30,9 +30,13 @@
 
 enum SMBUS_SIZE
 {
+	/* The following 3 transactions issue a register address preceding the
+	 * transaction. In SMBus lingo, this is "command code." */
 	SMBUS_SIZE_8  = SIZE8,
 	SMBUS_SIZE_16 = SIZE16,
-	SMBUS_SIZE_BLOCK
+	SMBUS_SIZE_BLOCK,
+	/* This transaction does not issue a register address. */
+	SMBUS_SIZE_BYTE,
 };
 
 typedef union {
@@ -96,7 +100,8 @@ parse_uint8(const char *arg, uint8_t *ret)
  * and write. It will parse the comand line arguments and open the appropriate
  * i2c device. It returns 1 on success, 0 on failure. */
 static int
-smbus_prologue(const char *argv[], struct smbus_op_params *params)
+smbus_prologue(const char *argv[], struct smbus_op_params *params,
+               const struct smbus_op *op)
 {
 	if (parse_uint8(argv[1], &params->i2c_bus)) {
 		fprintf(stderr, "invalid adapter value\n");
@@ -106,9 +111,14 @@ smbus_prologue(const char *argv[], struct smbus_op_params *params)
 		fprintf(stderr, "invalid address value\n");
 		return -1;
 	}
-	if (parse_uint8(argv[3], &params->reg)) {
-		fprintf(stderr, "invalid register value\n");
-		return -1;
+
+	/* Only obtain the register if size designates that it is not a byte
+	 * operation. */
+	if (op->size != SMBUS_SIZE_BYTE) {
+		if (parse_uint8(argv[3], &params->reg)) {
+			fprintf(stderr, "invalid register value\n");
+			return -1;
+		}
 	}
 
 	params->fd = open_i2c_slave(params->i2c_bus, params->address);
@@ -128,7 +138,7 @@ smbus_read(int argc, const char *argv[], const struct cmd_info *info)
 	const struct smbus_op *op =
 		(const struct smbus_op *)info->privdata;
 
-	if (smbus_prologue(argv, &params) < 0) {
+	if (smbus_prologue(argv, &params, op) < 0) {
 		return -1;
 	}
 
@@ -157,6 +167,10 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 		result = i2c_smbus_read_block_data(params->fd,
 		             params->reg, params->data.array) - 1;
 		break;
+	case SMBUS_SIZE_BYTE:
+		result = i2c_smbus_read_byte(params->fd);
+		params->data.fixed.u8 = result;
+		break;
 	default:
 		fprintf(stderr, "Illegal SMBus size for read operation.\n");
 		return -1;
@@ -165,13 +179,19 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 	/* if result contains the number of bytes read; make sure it is >= 1
 	 * otherwise make sure result >= 0 */
 	if (result < 0) {
-		fprintf(stderr, "can't read register 0x%02X, %s\n", params->reg,
-			strerror(errno));
+		if (op->size != SMBUS_SIZE_BYTE) {
+			fprintf(stderr, "can't read register 0x%02X, %s\n",
+			        params->reg, strerror(errno));
+		} else {
+			fprintf(stderr, "can't read from device 0x%02X, %s\n",
+			        params->address, strerror(errno));
+		}
 		return -1;
 	}
 
 	/* print out the data read. */
 	switch (op->size) {
+	case SMBUS_SIZE_BYTE:
 	case SMBUS_SIZE_8:
 		printf("0x%02X\n", params->data.fixed.u8);
 		break;
@@ -199,6 +219,7 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 	char *end;
 
 	switch (op->size) {
+	case SMBUS_SIZE_BYTE:
 	case SMBUS_SIZE_8:
 		ldata = strtoul(arg, &end, 0);
 		if (ldata == LONG_MAX || *end != '\0') {
@@ -252,12 +273,19 @@ smbus_write(int argc, const char *argv[], const struct cmd_info *info)
 	struct smbus_op_params params;
 	const struct smbus_op *op =
 		(const struct smbus_op *)info->privdata;
+	/* All SMBus write operations use argv[4] except for the send_byte
+	 * operation which uses 3. */
+	int arg_num = 4;
 
-	if (smbus_prologue(argv, &params) < 0) {
+	if (smbus_prologue(argv, &params, op) < 0) {
 		return -1;
 	}
 
-	if (parse_io_width(argv[4], &params, op) < 0 ) {
+	if (op->size == SMBUS_SIZE_BYTE) {
+		arg_num = 3;
+	}
+
+	if (parse_io_width(argv[arg_num], &params, op) < 0 ) {
 		fprintf(stderr, "invalid value to write\n");
 		return -1;
 	}
@@ -295,14 +323,23 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 		result = i2c_smbus_write_block_data(params->fd, params->reg,
 		             params->len, params->data.array);
 		break;
+	case SMBUS_SIZE_BYTE:
+		result = i2c_smbus_write_byte(params->fd,
+		                              params->data.fixed.u8);
+		break;
 	default:
 		fprintf(stderr, "Illegal SMBus size for write operation.\n");
 		return -1;
 	}
 
 	if (result < 0) {
-		fprintf(stderr, "can't write register 0x%02X, %s\n",
-		        params->reg, strerror(errno));
+		if (op->size != SMBUS_SIZE_BYTE) {
+			fprintf(stderr, "can't write register 0x%02X, %s\n",
+			        params->reg, strerror(errno));
+		} else {
+			fprintf(stderr, "can't write to device 0x%02X, %s\n",
+			        params->address, strerror(errno));
+		}
 		return -1;
 	}
 
@@ -313,6 +350,10 @@ MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_read_params, 4,
 	"<adapter> <address> <register>", 0);
 MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_write_params, 5,
 	"<adapter> <address> <register> <value>", 0);
+MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_receive_byte_params, 3,
+	"<adapter> <address>", 0);
+MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_send_byte_params, 4,
+	"<adapter> <address> <value>", 0);
 
 #define MAKE_SMBUS_OP(name_, size_, fn_) \
 	static const struct smbus_op name_ = { \
@@ -326,6 +367,7 @@ MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_write_params, 5,
 MAKE_SMBUS_RW_OP(smbus_op_8, 8, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_RW_OP(smbus_op_16, 16, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_RW_OP(smbus_op_block, BLOCK, smbus_read_op, smbus_write_op);
+MAKE_SMBUS_RW_OP(smbus_op_byte, BYTE, smbus_read_op, smbus_write_op);
 
 #define MAKE_SMBUS_RW_CMDS(size_) \
 	MAKE_CMD_WITH_PARAMS(smbus_read ##size_, smbus_read, \
@@ -337,6 +379,10 @@ static const struct cmd_info smbus_cmds[] = {
 	MAKE_SMBUS_RW_CMDS(8),
 	MAKE_SMBUS_RW_CMDS(16),
 	MAKE_SMBUS_RW_CMDS(block),
+	MAKE_CMD_WITH_PARAMS(smbus_receive_byte, smbus_read,
+	                     &smbus_op_byte_r, &smbus_receive_byte_params),
+	MAKE_CMD_WITH_PARAMS(smbus_send_byte, smbus_write,
+	                     &smbus_op_byte_w, &smbus_send_byte_params),
 };
 
 MAKE_CMD_GROUP(SMBus, "commands to access the system management bus",
