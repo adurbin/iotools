@@ -214,7 +214,8 @@ mmio_dump(int argc, const char *argv[], const struct cmd_info *info)
 		int bytes_printed = sizeof(*addr);
 		/* Print out the current address. */
 		if (!fields_on_line) {
-			fprintf(stdout, "%p:", (void *)(long)desired_addr);
+			fprintf(stdout, "0x%016llx:",
+			        (unsigned long long)desired_addr);
 		}
 
 		/* Print out the leftover bytes. */
