@@ -35,6 +35,7 @@
 MAKE_SIZE_PARAM(8);
 MAKE_SIZE_PARAM(16);
 MAKE_SIZE_PARAM(32);
+MAKE_SIZE_PARAM(64);
 
 static struct cmd_group *group_head;
 
