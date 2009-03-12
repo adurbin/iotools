@@ -26,6 +26,7 @@ typedef union {
 	uint8_t u8;
 	uint16_t u16;
 	uint32_t u32;
+	uint64_t u64;
 } data_store;
 
 
@@ -35,7 +36,8 @@ enum IO_SIZE
 {
 	SIZE8 = 8,
 	SIZE16 = 16,
-	SIZE32 = 32
+	SIZE32 = 32,
+	SIZE64 = 64,
 };
 
 struct size_param {
@@ -48,6 +50,7 @@ struct size_param {
 EXTERN_SIZE_PARAM(8);
 EXTERN_SIZE_PARAM(16);
 EXTERN_SIZE_PARAM(32);
+EXTERN_SIZE_PARAM(64);
 
 /* The min and max args need to include the argv[0] parameter. For example,
  * 'shl 1 3' would list the min and max arguments as 3. */

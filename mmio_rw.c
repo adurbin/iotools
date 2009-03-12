@@ -107,8 +107,8 @@ mmio_read_x(int argc, const char *argv[], const struct cmd_info *info)
 
 	#define DO_READ(mem_, off_, size_)\
 		data.u ##size_ = *(typeof(data.u ##size_) *)(mem_ + off_); \
-		fprintf(stdout, "0x%0*x\n", (int)sizeof(data.u ##size_)*2, \
-		        data.u ##size_)
+		fprintf(stdout, "0x%0*llx\n", (int)sizeof(data.u ##size_)*2, \
+		        (unsigned long long)data.u ##size_)
 
 	switch (get_command_size(info)) {
 	case SIZE8:
@@ -119,6 +119,13 @@ mmio_read_x(int argc, const char *argv[], const struct cmd_info *info)
 		break;
 	case SIZE32:
 		DO_READ(mmap_addr.mem, mmap_addr.off, 32);
+		break;
+	case SIZE64:
+		if (sizeof(void *) != sizeof(uint64_t)) {
+			fprintf(stderr, "warning: 64 bit operations might "
+			        "not be atomic on 32 bit builds\n");
+		}
+		DO_READ(mmap_addr.mem, mmap_addr.off, 64);
 		break;
 	default:
 		fprintf(stderr, "invalid mmio_read parameter\n");
@@ -160,6 +167,13 @@ mmio_write_x(int argc, const char *argv[], const struct cmd_info *info)
 		break;
 	case SIZE32:
 		DO_WRITE(mmap_addr.mem, mmap_addr.off, 32);
+		break;
+	case SIZE64:
+		if (sizeof(void *) != sizeof(uint64_t)) {
+			fprintf(stderr, "warning: 64 bit operations might "
+			        "not be atomic on 32 bit builds\n");
+		}
+		DO_WRITE(mmap_addr.mem, mmap_addr.off, 64);
 		break;
 	default:
 		fprintf(stderr, "invalid mmio_write parameter\n");
@@ -271,6 +285,7 @@ static const struct cmd_info mmio_cmds[] = {
 	MAKE_MMIO_RW_CMD_PAIR(8),
 	MAKE_MMIO_RW_CMD_PAIR(16),
 	MAKE_MMIO_RW_CMD_PAIR(32),
+	MAKE_MMIO_RW_CMD_PAIR(64),
 	MAKE_CMD_WITH_PARAMS(mmio_dump, &mmio_dump, NULL, &dump_params)
 };
 
