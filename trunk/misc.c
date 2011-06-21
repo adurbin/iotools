@@ -187,6 +187,7 @@ cpuid(int argc, const char *argv[], const struct cmd_info *info)
 static int
 cpu_list(int argc, const char *argv[], const struct cmd_info *info)
 {
+#ifdef _SC_NPROCESSORS_ONLN
 	int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 	int i;
 
@@ -194,6 +195,11 @@ cpu_list(int argc, const char *argv[], const struct cmd_info *info)
 		printf("%d\n", i);
 	}
 	return 0;
+#else /* ifdef _SC_NPROCESSORS_ONLN */
+	/* Some libraries do not define sysconf() properly. */
+	fprintf(stderr, "Operation not supported by library.\n");
+	return -1;
+#endif /* ifdef _SC_NPROCESSORS_ONLN */
 }
 
 /*
