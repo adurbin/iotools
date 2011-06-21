@@ -32,6 +32,43 @@
 #include <sched.h>
 #include "commands.h"
 
+/*
+ * There is a chance that we don't have cpu_set_t available to us, like
+ * in the case where we are building against klibc.  In these cases,
+ * dummy up the glibc interfaces.
+ */
+#ifndef __CPU_SETSIZE
+#define __CPU_SETSIZE	1024
+#define __NCPUBITS	(8 * sizeof (__cpu_mask))
+typedef unsigned long int __cpu_mask;
+
+/* Data structure to describe CPU mask. */
+typedef struct {
+	__cpu_mask __bits[__CPU_SETSIZE / __NCPUBITS];
+} cpu_set_t;
+
+static void CPU_ZERO(cpu_set_t *set)
+{
+	memset(set, 0, sizeof(set));
+}
+static void CPU_SET(int cpu, cpu_set_t *set)
+{
+	set->__bits[cpu / __NCPUBITS] |= 1 << (cpu % __NCPUBITS);
+}
+
+/*
+ * sched_setaffinity actually takes an "unsigned long *" for the mask,
+ * while glibc takes a "cpu_set_t *".  Wrap the call to deal with the
+ * inconsistency.
+ */
+static int local_setaffinity(pid_t pid, size_t cpusetsize, cpu_set_t *mask)
+{
+	return sched_setaffinity(pid, cpusetsize, (unsigned long *)mask);
+}
+#else /* ifndef __CPU_SETSIZE */
+#define local_setaffinity sched_setaffinity
+#endif /* ifndef __CPU_SETSIZE */
+
 /* Helper function to set the affinity of the process to a given cpu. */
 static int
 set_cpu_affinity(int cpu)
@@ -41,7 +78,7 @@ set_cpu_affinity(int cpu)
 	/* run on the specified CPU */
 	CPU_ZERO(&cpuset);
 	CPU_SET(cpu, &cpuset);
-	if (sched_setaffinity(getpid(), sizeof(cpuset), &cpuset) < 0) {
+	if (local_setaffinity(getpid(), sizeof(cpuset), &cpuset) < 0) {
 		perror("sched_setaffinity()");
 		return -1;
 	}
