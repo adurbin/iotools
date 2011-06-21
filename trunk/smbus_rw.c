@@ -74,7 +74,8 @@ open_i2c_slave(unsigned char i2c_bus, unsigned char slave_address)
 		return -1;
 	}
 
-	if (ioctl(fd, I2C_SLAVE, slave_address) < 0) {
+	/* Double cast the last argument for compat with klibc. */
+	if (ioctl(fd, I2C_SLAVE, (void *)(intptr_t)slave_address) < 0) {
 		printf("Could not attach to i2c bus %d slave address %d: %s\n",
 		       i2c_bus, slave_address, strerror(errno));
 		close(fd);
@@ -315,7 +316,9 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 
 	/* FIXME: Why is this needed if the open_i2c_slave performs the ioctl
 	 * with I2C_SLAVE? */
-	if (ioctl(params->fd, I2C_SLAVE_FORCE, params->address) < 0) {
+	/* Double cast the last argument for compat with klibc. */
+	if (ioctl(params->fd, I2C_SLAVE_FORCE,
+	          (void *)(intptr_t)params->address) < 0) {
 		fprintf(stderr, "can't set address 0x%02X, %s\n",
 		        params->address, strerror(errno));
 		return -1;
