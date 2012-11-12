@@ -215,9 +215,9 @@ mmio_dump(int argc, const char *argv[], const struct cmd_info *info)
 
 	if (write_binary) {
 		void *buffer_to_write = (void *)mmap_addr.mem + mmap_addr.off;
-		fwrite(buffer_to_write, bytes_to_dump, 1, stdout);
+		int ret = fwrite(buffer_to_write, bytes_to_dump, 1, stdout);
 		close_mapping(&mmap_addr);
-		return 0;
+		return ret == 1 ? 0 : -1;
 	}
 
 	addr = (void *)mmap_addr.mem + mmap_addr.off;
