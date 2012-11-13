@@ -16,10 +16,14 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/io.h>
 #include "commands.h"
+#include "platform.h"
+
+#ifdef ARCH_X86
+#include <sys/io.h>
 
 static int
 io_read_x(int argc, const char *argv[], const struct cmd_info *info)
@@ -116,3 +120,5 @@ static const struct cmd_info io_cmds[] = {
 MAKE_CMD_GROUP(IO, "commands to access registers in the IO address space",
                io_cmds);
 REGISTER_CMD_GROUP(IO);
+
+#endif /* #ifdef ARCH_X86 */

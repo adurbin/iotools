@@ -30,6 +30,9 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include "commands.h"
+#include "platform.h"
+
+#ifdef ARCH_X86
 
 static int
 open_and_seek(int cpu, unsigned long msr, int mode, int *fd)
@@ -118,3 +121,5 @@ static const struct cmd_info msr_cmds[] = {
 MAKE_CMD_GROUP(MSR, "commands to access CPU model specific registers",
                msr_cmds);
 REGISTER_CMD_GROUP(MSR);
+
+#endif /* #ifdef ARCH_X86 */

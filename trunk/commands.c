@@ -21,8 +21,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#include <sys/io.h>
 #include "commands.h"
+#include "platform.h"
+#ifdef ARCH_X86
+#include <sys/io.h>
+#endif /* #ifdef ARCH_X86 */
 
 /* Provide shared parameters the describe the size of the operation for 
  * subcommand implementations. */
@@ -69,11 +72,13 @@ check_prereqs(int argc, const char *argv[], const struct prereq_params *params)
 		return -1;
 	}
 
+#ifdef ARCH_X86
 	/* If iopl_needed is non-zero attempt to change to iopl. */
 	if (params->iopl_needed != 0 && iopl(params->iopl_needed) < 0) {
 		fprintf(stderr, "can't set io privilege level\n");
 		return -1;
 	}
+#endif /* #ifdef ARCH_X86 */
 
 	return 0;
 }

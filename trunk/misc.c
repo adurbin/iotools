@@ -31,6 +31,7 @@
 #include <unistd.h>
 #include <sched.h>
 #include "commands.h"
+#include "platform.h"
 
 /*
  * There is a chance that we don't have cpu_set_t available to us, like
@@ -123,6 +124,8 @@ busy_loop(int argc, const char *argv[], const struct cmd_info *info)
 	return 0;
 }
 
+#ifdef ARCH_X86
+
 #define rdtscll(val) do { \
 	uint32_t __a, __d; \
 	__asm__ __volatile__("rdtsc" : "=a" (__a), "=d" (__d)); \
@@ -184,6 +187,8 @@ cpuid(int argc, const char *argv[], const struct cmd_info *info)
 	return 0;
 }
 
+#endif /* #ifdef ARCH_X86 */
+
 static int
 cpu_list(int argc, const char *argv[], const struct cmd_info *info)
 {
@@ -242,10 +247,12 @@ MAKE_PREREQ_PARAMS_VAR_ARGS(cpuid_params, 3, 4, "<cpu> <function> [index]", 0);
 MAKE_PREREQ_PARAMS_VAR_ARGS(runon_params, 3, INT_MAX, "<cpu> <cmd> [args]", 0);
 
 static const struct cmd_info misc_cmds[] = {
+#ifdef ARCH_X86
 	MAKE_CMD(rdtsc, rdtsc, NULL),
+	MAKE_CMD_WITH_PARAMS(cpuid, cpuid, NULL, &cpuid_params),
+#endif /* #ifdef ARCH_X86 */
 	MAKE_CMD(busy_loop, &busy_loop, NULL),
 	MAKE_CMD(cpu_list, cpu_list, NULL),
-	MAKE_CMD_WITH_PARAMS(cpuid, cpuid, NULL, &cpuid_params),
 	MAKE_CMD_WITH_PARAMS(runon, &runon, NULL, &runon_params),
 };
 

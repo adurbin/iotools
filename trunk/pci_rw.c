@@ -31,34 +31,40 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include "commands.h"
+#include "platform.h"
 
 #define PROCFS_BASE_DIR	"/proc/bus/pci"
 #define SYSFS_BASE_DIR	"/sys/bus/pci/devices"
 
 static int
-open_device(int bus, int device, int function, int mode)
+open_device(int segment, int bus, int device, int function, int mode)
 {
 	static char filename[FILENAME_MAX];
 	int fd;
 
 	/* Try sysfs first, but fall back on the proc filesystem. */
-	/* FIXME: add support for segments. */
-	snprintf(filename, sizeof(filename), "%s/0000:%02x:%02x.%x/config",
-		 SYSFS_BASE_DIR, bus, device, function);
+	snprintf(filename, sizeof(filename), "%s/%04x:%02x:%02x.%x/config",
+		 SYSFS_BASE_DIR, segment, bus, device, function);
 	fd = open(filename, mode);
 
 	/* If sysfs failed, try the proc filesystem. */
 	if (fd < 0) {
-		snprintf(filename, sizeof(filename), "%s/%02x/%02x.%x",
-		         PROCFS_BASE_DIR, bus, device, function);
+		if (segment == 0) {
+			snprintf(filename, sizeof(filename), "%s/%02x/%02x.%x",
+				 PROCFS_BASE_DIR, bus, device, function);
+		} else {
+			snprintf(filename, sizeof(filename),
+			         "%s/%04x:%02x/%02x.%x", PROCFS_BASE_DIR,
+			         segment, bus, device, function);
+		}
 		fd = open(filename, mode);
 	}
 
 	if (fd < 0) {
 		fprintf(stderr,
 		        "Unable to open file to access PCI device "
-		        "'%02x:%02x.%x': %s\n",
-		        bus, device, function, strerror(errno));
+		        "'%04x:%02x:%02x.%x': %s\n",
+		        segment, bus, device, function, strerror(errno));
 	}
 
 	return fd;
@@ -67,19 +73,28 @@ open_device(int bus, int device, int function, int mode)
 static int
 pci_read_x(int argc, const char *argv[], const struct cmd_info *info)
 {
+	unsigned int seg;
 	unsigned int bus;
 	unsigned int dev;
 	unsigned int func;
 	unsigned int reg;
 	data_store data;
 	int fd;
+	int arg;
 
-	bus = strtol(argv[1], NULL, 0);
-	dev = strtoul(argv[2], NULL, 0);
-	func = strtoul(argv[3], NULL, 0);
-	reg = strtoul(argv[4], NULL, 0);
+	arg = 1;
+	if (argc > 5) {
+		seg = strtol(argv[arg++], NULL, 0);
+	} else {
+		seg = 0;
+	}
+	bus = strtol(argv[arg++], NULL, 0);
+	dev = strtoul(argv[arg++], NULL, 0);
+	func = strtoul(argv[arg++], NULL, 0);
+	reg = strtoul(argv[arg++], NULL, 0);
+	
 
-	fd = open_device(bus, dev, func, O_RDONLY);
+	fd = open_device(seg, bus, dev, func, O_RDONLY);
 	if (fd < 0) {
 		return -1;
 	}
@@ -96,6 +111,7 @@ pci_read_x(int argc, const char *argv[], const struct cmd_info *info)
 		    fprintf(stderr, "read(): %s\n", strerror(errno)); \
 		    return -1; \
 		} \
+		data.u ##size_ = le_to_host_##size_(data.u ##size_); \
 		fprintf(stdout, "0x%0*x\n", (int)sizeof(data.u ##size_)*2, \
 		       data.u ##size_)
 
@@ -122,6 +138,7 @@ pci_read_x(int argc, const char *argv[], const struct cmd_info *info)
 static int
 pci_write_x(int argc, const char *argv[], const struct cmd_info *info)
 {
+	unsigned int seg;
 	unsigned int bus;
 	unsigned int dev;
 	unsigned int func;
@@ -129,14 +146,21 @@ pci_write_x(int argc, const char *argv[], const struct cmd_info *info)
 	unsigned long ldata;
 	data_store data;
 	int fd;
+	int arg;
 
-	bus = strtol(argv[1], NULL, 0);
-	dev = strtoul(argv[2], NULL, 0);
-	func = strtoul(argv[3], NULL, 0);
-	reg = strtoul(argv[4], NULL, 0);
-	ldata = strtoul(argv[5], NULL, 0);
+	arg = 1;
+	if (argc > 6) {
+		seg = strtol(argv[arg++], NULL, 0);
+	} else {
+		seg = 0;
+	}
+	bus = strtol(argv[arg++], NULL, 0);
+	dev = strtoul(argv[arg++], NULL, 0);
+	func = strtoul(argv[arg++], NULL, 0);
+	reg = strtoul(argv[arg++], NULL, 0);
+	ldata = strtoul(argv[arg++], NULL, 0);
 
-	if ((fd = open_device(bus, dev, func, O_WRONLY)) < 0 ) {
+	if ((fd = open_device(seg, bus, dev, func, O_WRONLY)) < 0 ) {
 		return -1;
 	}
 
@@ -147,7 +171,7 @@ pci_write_x(int argc, const char *argv[], const struct cmd_info *info)
 
 #define DO_WRITE(size_) \
 	do { \
-	data.u ##size_ = (typeof(data.u ##size_))ldata; \
+	data.u ##size_ = host_to_le_##size_((typeof(data.u ##size_))ldata); \
 	if (write(fd, &data.u ##size_, sizeof(data.u ##size_)) != \
 	    sizeof(data.u ##size_)) { \
 		fprintf(stderr, "write(): %s\n", strerror(errno)); \
@@ -247,8 +271,10 @@ pci_list(int argc, const char *argv[], const struct cmd_info *info)
 	return ret;
 }
 
-MAKE_PREREQ_PARAMS_FIXED_ARGS(rd_params, 5, "<bus> <dev> <func> <reg>", 0);
-MAKE_PREREQ_PARAMS_FIXED_ARGS(wr_params, 6, "<bus> <dev> <func> <reg> <data>", 0);
+MAKE_PREREQ_PARAMS_VAR_ARGS(rd_params, 5, 6,
+                            "[segment] <bus> <dev> <func> <reg>", 0);
+MAKE_PREREQ_PARAMS_VAR_ARGS(wr_params, 6, 7,
+                            "[segment] <bus> <dev> <func> <reg> <data>", 0);
 
 #define MAKE_PCI_READ_CMD(size_) \
 	MAKE_CMD_WITH_PARAMS(pci_read ##size_, &pci_read_x, &size ##size_, \
