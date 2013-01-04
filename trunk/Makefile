@@ -46,11 +46,16 @@ all: $(BINARY)
 $(BINARY): $(OBJS) iotools.o Makefile
 	$(CC) $(CFLAGS) -o $@ iotools.o $(OBJS)
 
+install: $(BINARY)
+	cp -a $^ $(SBINDIR)
+	$(SBINDIR)/$(BINARY) --make-links
+
 RUSER ?= root
 RHOST ?=
-rinstall: $(BINARY) $(SCRIPTS)
+rinstall: $(BINARY)
 	@if [ -n "$(RHOST)" ]; then \
 		scp $^ $(RUSER)@$(RHOST):$(SBINDIR); \
+		ssh $(RUSER)@$(RHOST) $(SBINDIR)/$(BINARY) --make-links; \
 	else \
 		echo $@: no RHOST defined; \
 	fi
