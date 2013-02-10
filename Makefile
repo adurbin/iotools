@@ -44,7 +44,7 @@ OBJS=$(OBJS_TO_BUILD)
 all: $(BINARY)
 
 $(BINARY): $(OBJS) iotools.o Makefile
-	$(CC) $(CFLAGS) -o $@ iotools.o $(OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ iotools.o $(OBJS)
 
 install: $(BINARY)
 	cp -a $^ $(SBINDIR)
