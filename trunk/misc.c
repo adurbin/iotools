@@ -152,10 +152,25 @@ cpuid_inline(int cpu, int function, int index, uint32_t *data)
 	}
 
 	asm volatile (
-	      "cpuid\n\t"
+#if defined(__i386__) && defined(__PIC__)
+	      /* We can't use %ebx on 32 bit builds with PIC.
+	       *
+	       * The need for this is, IMO, a bug in GCC.  We should not
+	       * need to know what registers it is using internally.  It
+	       * should be saving and restoring them itself.
+	       */
+	      "xchg %%ebx, %%esi;" /* save ebx in esi */
+	      "cpuid;"
+	      "xchg %%esi, %%ebx;" /* restore ebx, data moves to esi */
+	      : "=a" (data[0]), "=S" (data[1]), "=c" (data[2]), "=d" (data[3])
+	      : "0" (function), "2" (index)
+	      : "memory"
+#else
+	      "cpuid;"
 	      : "=a" (data[0]), "=b" (data[1]), "=c" (data[2]), "=d" (data[3])
 	      : "0" (function), "2" (index)
 	      : "memory"
+#endif
 	);
 
 	return 0;
