@@ -40,6 +40,10 @@ struct mmap_info {
 	uint64_t addr;
 };
 
+struct mmap_file_flags {
+	int flags;
+};
+
 /* open /dev/mem and mmap the address specified in mmap_addr. return 1 on
  * success, 0 on failure. */
 static int
@@ -52,7 +56,7 @@ open_mapping(struct mmap_info *mmap_addr, int flags, unsigned bytes)
 	mmap_addr->off = mmap_addr->addr & (mmap_addr->pgsize - 1);
 	mmap_addr->addr &= ~ ((uint64_t)mmap_addr->pgsize - 1);
 
-	mmap_addr->fd = open("/dev/mem", flags|O_SYNC);
+	mmap_addr->fd = open("/dev/mem", flags);
 	if (mmap_addr->fd < 0) {
 		fprintf(stderr, "open(/dev/mem): %s\n", strerror(errno));
 		return -1;
@@ -96,10 +100,13 @@ mmio_read_x(int argc, const char *argv[], const struct cmd_info *info)
 	int ret;
 	data_store data;
 	struct mmap_info mmap_addr;
+	const struct mmap_file_flags *mmf;
+
+	mmf = info->privdata;
 
 	mmap_addr.addr = strtoull(argv[1], NULL, 0);
 
-	if (open_mapping(&mmap_addr, O_RDONLY, sizeof(data)) < 0) {
+	if (open_mapping(&mmap_addr, O_RDONLY | mmf->flags, sizeof(data)) < 0) {
 		return -1;
 	}
 
@@ -267,28 +274,52 @@ mmio_dump(int argc, const char *argv[], const struct cmd_info *info)
 	return 0;
 }
 
+static struct mmap_file_flags cacheable_access = {};
+static struct mmap_file_flags uncacheable_access = { O_SYNC };
+
 MAKE_PREREQ_PARAMS_FIXED_ARGS(rd_params, 2, "<addr>", 0);
 MAKE_PREREQ_PARAMS_FIXED_ARGS(wr_params, 3, "<addr> <value>", 0);
 MAKE_PREREQ_PARAMS_VAR_ARGS(dump_params, 3, 4, "<addr> <num_bytes> [-b]", 0);
 
-#define MAKE_MMIO_READ_CMD(size_) \
-	MAKE_CMD_WITH_PARAMS_SIZE(mmio_read ##size_, &mmio_read_x, NULL, \
-	                          &rd_params, &size ##size_)
-#define MAKE_MMIO_WRITE_CMD(size_) \
-	MAKE_CMD_WITH_PARAMS_SIZE(mmio_write ##size_, &mmio_write_x, NULL, \
-	                          &wr_params, &size ##size_)
-#define MAKE_MMIO_RW_CMD_PAIR(size_) \
-	MAKE_MMIO_READ_CMD(size_), \
-	MAKE_MMIO_WRITE_CMD(size_)
+#define MAKE_MMIO_READ_CMD(prefix_, size_, access_) \
+	MAKE_CMD_WITH_PARAMS_SIZE(prefix_ ## _read ##size_, &mmio_read_x, \
+	                          &access_, &rd_params, &size ##size_)
+#define MAKE_MMIO_WRITE_CMD(prefix_, size_, access_) \
+	MAKE_CMD_WITH_PARAMS_SIZE(prefix_ ## _write ##size_, &mmio_write_x, \
+	                          &access_, &wr_params, &size ##size_)
+#define MAKE_MMIO_RW_CMD_PAIR(prefix_, size_, access_) \
+	MAKE_MMIO_READ_CMD(prefix_, size_, access_), \
+	MAKE_MMIO_WRITE_CMD(prefix_, size_, access_)
+
+#define MAKE_UC_MMIO_RW_CMD_PAIR(size_) \
+	MAKE_MMIO_RW_CMD_PAIR(mmio, size_, uncacheable_access)
+#define MAKE_WB_MMIO_RW_CMD_PAIR(size_) \
+	MAKE_MMIO_RW_CMD_PAIR(mem, size_, cacheable_access)
 
 static const struct cmd_info mmio_cmds[] = {
-	MAKE_MMIO_RW_CMD_PAIR(8),
-	MAKE_MMIO_RW_CMD_PAIR(16),
-	MAKE_MMIO_RW_CMD_PAIR(32),
-	MAKE_MMIO_RW_CMD_PAIR(64),
-	MAKE_CMD_WITH_PARAMS(mmio_dump, &mmio_dump, NULL, &dump_params)
+	MAKE_UC_MMIO_RW_CMD_PAIR(8),
+	MAKE_UC_MMIO_RW_CMD_PAIR(16),
+	MAKE_UC_MMIO_RW_CMD_PAIR(32),
+	MAKE_UC_MMIO_RW_CMD_PAIR(64),
+	MAKE_CMD_WITH_PARAMS(mmio_dump, &mmio_dump, &uncacheable_access,
+	                     &dump_params)
 };
 
-MAKE_CMD_GROUP(MMIO, "commands to access memory mapped address spaces",
+MAKE_CMD_GROUP(MMIO,
+               "commands to access uncacheable memory mapped address spaces",
                mmio_cmds);
 REGISTER_CMD_GROUP(MMIO);
+
+static const struct cmd_info cacheable_mmio_cmds[] = {
+	MAKE_WB_MMIO_RW_CMD_PAIR(8),
+	MAKE_WB_MMIO_RW_CMD_PAIR(16),
+	MAKE_WB_MMIO_RW_CMD_PAIR(32),
+	MAKE_WB_MMIO_RW_CMD_PAIR(64),
+	MAKE_CMD_WITH_PARAMS(mem_dump, &mmio_dump, &cacheable_access,
+	                     &dump_params)
+};
+
+MAKE_CMD_GROUP(MEM,
+               "commands to access cacheable memory mapped address spaces",
+               cacheable_mmio_cmds);
+REGISTER_CMD_GROUP(MEM);
