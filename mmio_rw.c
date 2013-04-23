@@ -272,11 +272,11 @@ MAKE_PREREQ_PARAMS_FIXED_ARGS(wr_params, 3, "<addr> <value>", 0);
 MAKE_PREREQ_PARAMS_VAR_ARGS(dump_params, 3, 4, "<addr> <num_bytes> [-b]", 0);
 
 #define MAKE_MMIO_READ_CMD(size_) \
-	MAKE_CMD_WITH_PARAMS(mmio_read ##size_, &mmio_read_x, &size ##size_, \
-	                     &rd_params)
+	MAKE_CMD_WITH_PARAMS_SIZE(mmio_read ##size_, &mmio_read_x, NULL, \
+	                          &rd_params, &size ##size_)
 #define MAKE_MMIO_WRITE_CMD(size_) \
-	MAKE_CMD_WITH_PARAMS(mmio_write ##size_, &mmio_write_x, &size ##size_, \
-	                     &wr_params)
+	MAKE_CMD_WITH_PARAMS_SIZE(mmio_write ##size_, &mmio_write_x, NULL, \
+	                          &wr_params, &size ##size_)
 #define MAKE_MMIO_RW_CMD_PAIR(size_) \
 	MAKE_MMIO_READ_CMD(size_), \
 	MAKE_MMIO_WRITE_CMD(size_)

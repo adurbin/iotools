@@ -102,11 +102,11 @@ MAKE_PREREQ_PARAMS_FIXED_ARGS(rd_params, 2, "<io_addr>", 3);
 MAKE_PREREQ_PARAMS_FIXED_ARGS(wr_params, 3, "<io_addr> <data>", 3);
 
 #define MAKE_IO_READ_CMD(size_) \
-	MAKE_CMD_WITH_PARAMS(io_read ##size_, &io_read_x, &size ##size_, \
-	                     &rd_params)
+	MAKE_CMD_WITH_PARAMS_SIZE(io_read ##size_, &io_read_x, NULL, \
+	                          &rd_params, &size ##size_)
 #define MAKE_IO_WRITE_CMD(size_) \
-	MAKE_CMD_WITH_PARAMS(io_write ##size_, &io_write_x, &size ##size_, \
-	                     &wr_params)
+	MAKE_CMD_WITH_PARAMS_SIZE(io_write ##size_, &io_write_x, NULL, \
+	                          &wr_params, &size ##size_)
 #define MAKE_IO_RW_CMD_PAIR(size_) \
 	MAKE_IO_READ_CMD(size_), \
 	MAKE_IO_WRITE_CMD(size_)
