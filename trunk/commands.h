@@ -111,21 +111,28 @@ struct cmd_info
 	int (*entry)(int argc, const char *argv[], const struct cmd_info *info);
 	const void *privdata;
 	const struct prereq_params *params;
+	const struct size_param *sizedata;
 };
 
-#define _MAKE_CMD(name_, entry_point_, priv_data_, params_) \
+#define _MAKE_CMD(name_, entry_point_, priv_data_, params_, size_data_) \
 	{ \
 		.name = #name_, \
 		.entry = entry_point_, \
 		.privdata = priv_data_, \
 		.params = params_, \
+		.sizedata = size_data_, \
 	}
 
 #define MAKE_CMD(name_, entry_point_, priv_data_) \
-	_MAKE_CMD(name_, entry_point_, priv_data_, NULL)
+	_MAKE_CMD(name_, entry_point_, priv_data_, NULL, NULL)
+#define MAKE_CMD_WITH_SIZE(name_, entry_point_, size_data_) \
+	_MAKE_CMD(name_, entry_point_, NULL, NULL, size_data_)
 
 #define MAKE_CMD_WITH_PARAMS(name_, entry_point_, priv_data_, params_) \
-	_MAKE_CMD(name_, entry_point_, priv_data_, params_)
+	_MAKE_CMD(name_, entry_point_, priv_data_, params_, NULL)
+#define MAKE_CMD_WITH_PARAMS_SIZE(name_, entry_point_, priv_data_, params_, size_data_) \
+	_MAKE_CMD(name_, entry_point_, priv_data_, params_, size_data_)
+
 
 int run_command(int argc, const char *argv[]);
 int make_command_links(void);
@@ -142,10 +149,9 @@ int register_command_group(struct cmd_group *group);
 static inline int
 get_command_size(const struct cmd_info *info)
 {
-	const struct size_param *size_info =
-		(const struct size_param *)info->privdata;
-
-	return size_info->size;
+	if (info->sizedata == NULL)
+		return -1;
+	return info->sizedata->size;
 }
 
 #endif /* _COMMANDS_H_ */

@@ -277,11 +277,11 @@ MAKE_PREREQ_PARAMS_VAR_ARGS(wr_params, 6, 7,
                             "[segment] <bus> <dev> <func> <reg> <data>", 0);
 
 #define MAKE_PCI_READ_CMD(size_) \
-	MAKE_CMD_WITH_PARAMS(pci_read ##size_, &pci_read_x, &size ##size_, \
-	                     &rd_params)
+	MAKE_CMD_WITH_PARAMS_SIZE(pci_read ##size_, &pci_read_x, NULL, \
+	                         &rd_params, &size ##size_)
 #define MAKE_PCI_WRITE_CMD(size_) \
-	MAKE_CMD_WITH_PARAMS(pci_write ##size_, &pci_write_x, &size ##size_, \
-	                     &wr_params)
+	MAKE_CMD_WITH_PARAMS_SIZE(pci_write ##size_, &pci_write_x, NULL, \
+	                          &wr_params, &size ##size_)
 #define MAKE_PCI_RW_CMD_PAIR(size_) \
 	MAKE_PCI_READ_CMD(size_), \
 	MAKE_PCI_WRITE_CMD(size_)
