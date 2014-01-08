@@ -16,14 +16,96 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-
+#define _FILE_OFFSET_BITS 64
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "commands.h"
 #include "platform.h"
 
 #ifdef ARCH_X86
 #include <sys/io.h>
+#else
+/* Platform independent IO port access using /dev/port device node */
+static const char dev_port[] = "/dev/port";
+
+static int io_in(int iobase, int size, void *data)
+{
+	int ret, fd;
+
+	fd = open(dev_port, O_RDONLY);
+	if (fd < 0) {
+		fprintf(stderr, "open(\"%s\"): %s\n", dev_port, strerror(errno));
+		return -1;
+	}
+
+	if (lseek(fd, iobase, SEEK_SET) == (off_t)-1) {
+		fprintf(stderr, "lseek(%d): %s\n", iobase, strerror(errno));
+		close(fd);
+		return -1;
+	}
+
+	ret = read(fd, data, size);
+	return ret;
+}
+
+static uint8_t inb(int iobase)
+{
+	uint8_t val = 0xff;
+	io_in(iobase, sizeof(val), &val);
+	return val;
+}
+static uint16_t inw(int iobase)
+{
+	uint16_t val = 0xffff;
+	io_in(iobase, sizeof(val), &val);
+	return val;
+}
+static uint32_t inl(int iobase)
+{
+	uint32_t val = 0xffff;
+	io_in(iobase, sizeof(val), &val);
+	return val;
+}
+
+static int io_out(int iobase, int size, void *data)
+{
+        int ret, fd;
+
+	fd = open(dev_port, O_WRONLY);
+	if (fd < 0) {
+		fprintf(stderr, "open(\"%s\"): %s\n", dev_port, strerror(errno));
+		return -1;
+	}
+
+	if (lseek(fd, iobase, SEEK_SET) == (off_t)-1) {
+		fprintf(stderr, "lseek(%d): %s\n", iobase, strerror(errno));
+		close(fd);
+		return -1;
+	}
+
+	ret = write(fd, data, size);
+	return ret;
+}
+
+static void outb(uint8_t val, int iobase)
+{
+	io_out(iobase, sizeof(val), &val);
+}
+static void outw(uint16_t val, int iobase)
+{
+	io_out(iobase, sizeof(val), &val);
+}
+static void outl(uint32_t val, int iobase)
+{
+	io_out(iobase, sizeof(val), &val);
+}
+#endif  /* #ifdef ARCH_X86 */
 
 static int
 io_read_x(int argc, const char *argv[], const struct cmd_info *info)
@@ -121,4 +203,3 @@ MAKE_CMD_GROUP(IO, "commands to access registers in the IO address space",
                io_cmds);
 REGISTER_CMD_GROUP(IO);
 
-#endif /* #ifdef ARCH_X86 */
