@@ -156,14 +156,17 @@ pir_to_chipid(uint32_t pir, uint32_t *chipid)
 {
 	char cpu_glob_str[512];
 	glob_t globbuf;
+	int glob_err;
 	int fd;
 
+	/* Zero out pir's thread number to get pir of the core */
+	pir &= ~0x7;
 	snprintf(cpu_glob_str, sizeof(cpu_glob_str),
 	         "/proc/device-tree/cpus/*@%x/ibm,chip-id", pir);
 
-	if (glob(cpu_glob_str, 0, NULL, &globbuf) != 0) {
-		fprintf(stderr, "glob(\"%s\"): %s\n", cpu_glob_str,
-		        strerror(errno));
+	glob_err = glob(cpu_glob_str, 0, NULL, &globbuf);
+	if (glob_err != 0) {
+		fprintf(stderr, "glob(\"%s\"): %d\n", cpu_glob_str, glob_err);
 		return -1;
 	}
 
