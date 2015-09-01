@@ -15,7 +15,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 VER_MAJOR = 1
-VER_MINOR = 5
+VER_MINOR = 6
 
 CC=$(CROSS_COMPILE)gcc
 
