@@ -202,6 +202,7 @@ mmio_dump(int argc, const char *argv[], const struct cmd_info *info)
 	uint64_t desired_addr;
 	int fields_on_line;
 	int write_binary;
+	const struct mmap_file_flags *mmf = info->privdata;
 
 	desired_addr = strtoull(argv[1], NULL, 0);
 	bytes_to_dump = strtoul(argv[2], NULL, 0);
@@ -216,7 +217,7 @@ mmio_dump(int argc, const char *argv[], const struct cmd_info *info)
 	}
 
 	mmap_addr.addr = desired_addr;
-	if (open_mapping(&mmap_addr, O_RDONLY, bytes_to_dump) < 0) {
+	if (open_mapping(&mmap_addr, O_RDONLY | mmf->flags, bytes_to_dump) < 0) {
 		return -1;
 	}
 
