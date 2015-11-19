@@ -24,16 +24,19 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <assert.h>
 #include <sys/ioctl.h>
 #include "commands.h"
-#include "linux-i2c-dev.h"
+#include "iotools-i2c-dev.h"
 
 enum SMBUS_SIZE
 {
-	/* The following 3 transactions issue a register address preceding the
+	/* The following 5 transactions issue a register address preceding the
 	 * transaction. In SMBus lingo, this is "command code." */
 	SMBUS_SIZE_8  = SIZE8,
 	SMBUS_SIZE_16 = SIZE16,
+	SMBUS_SIZE_32 = SIZE32,		/* new in smbus 3 */
+	SMBUS_SIZE_64 = SIZE64,
 	SMBUS_SIZE_BLOCK,
 	/* This transaction does not issue a register address. */
 	SMBUS_SIZE_BYTE,
@@ -93,6 +96,12 @@ parse_uint8(const char *arg, uint8_t *ret)
 
 	ldata = strtoul(arg, &end, 0);
 	if (ldata == LONG_MAX || *end != '\0') {
+		fprintf(stderr, "%s: is LONG_MAX or is followed by junk\n",
+			arg);
+		return -1;
+	}
+	if (ldata > 0xff) {
+		fprintf(stderr, "%s: won't fit in a byte\n", arg);
 		return -1;
 	}
 	*ret = (uint8_t)ldata;
@@ -106,6 +115,7 @@ static int
 smbus_prologue(const char *argv[], struct smbus_op_params *params,
                const struct smbus_op *op)
 {
+	params->fd = -1;		/* in case of early return */
 	if (parse_uint8(argv[1], &params->i2c_bus)) {
 		fprintf(stderr, "invalid adapter value\n");
 		return -1;
@@ -126,7 +136,7 @@ smbus_prologue(const char *argv[], struct smbus_op_params *params,
 
 	params->fd = open_i2c_slave(params->i2c_bus, params->address);
 	if (params->fd < 0) {
-		fprintf(stderr, "can't get slave\n");
+		fprintf(stderr, "can't open slave\n");
 		return -1;
 	}
 
@@ -166,6 +176,14 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 		result = i2c_smbus_read_word_data(params->fd, params->reg);
 		params->data.fixed.u16 = result;
 		break;
+	case SMBUS_SIZE_32:
+		result = i2c_smbus_read_32_data(params->fd, params->reg);
+		params->data.fixed.u32 = result;
+		break;
+	case SMBUS_SIZE_64:
+		result = i2c_smbus_read_64_data(params->fd, params->reg);
+		params->data.fixed.u64 = result;
+		break;
 	case SMBUS_SIZE_BLOCK:
 		result = i2c_smbus_read_block_data(params->fd,
 		             params->reg, params->data.array) - 1;
@@ -183,10 +201,10 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 	 * otherwise make sure result >= 0 */
 	if (result < 0) {
 		if (op->size != SMBUS_SIZE_BYTE) {
-			fprintf(stderr, "can't read register 0x%02X, %s\n",
+			fprintf(stderr, "can't read register 0x%X, %s\n",
 			        params->reg, strerror(errno));
 		} else {
-			fprintf(stderr, "can't read from device 0x%02X, %s\n",
+			fprintf(stderr, "can't read from device 0x%X, %s\n",
 			        params->address, strerror(errno));
 		}
 		return -1;
@@ -200,6 +218,12 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 		break;
 	case SMBUS_SIZE_16:
 		printf("0x%04X\n", params->data.fixed.u16);
+		break;
+	case SMBUS_SIZE_32:
+		printf("0x%08X\n", params->data.fixed.u32);
+		break;
+	case SMBUS_SIZE_64:
+		printf("0x%016lX\n", params->data.fixed.u64);
 		break;
 	case SMBUS_SIZE_BLOCK:
 		{
@@ -218,15 +242,19 @@ static int
 parse_io_width(const char *arg, struct smbus_op_params *params,
                const struct smbus_op *op)
 {
-	unsigned long ldata;
+	uint64_t ldata;
 	char *end;
 
 	switch (op->size) {
 	case SMBUS_QUICK:
 		ldata = strtoul(arg, &end, 0);
 		if (ldata == LONG_MAX || *end != '\0') {
+			fprintf(stderr,
+				"%s: is LONG_MAX or is followed by junk\n",
+				arg);
 			return -1;
 		} else if (ldata != 0 && ldata != 1) {
+			fprintf(stderr, "%s: isn't 0 or 1\n", arg);
 			return -1;
 		}
 		params->data.fixed.u8 = ldata;
@@ -235,6 +263,9 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 	case SMBUS_SIZE_8:
 		ldata = strtoul(arg, &end, 0);
 		if (ldata == LONG_MAX || *end != '\0') {
+			fprintf(stderr,
+				"%s: is LONG_MAX or is followed by junk\n",
+				arg);
 			return -1;
 		}
 		params->data.fixed.u8 = ldata;
@@ -242,29 +273,53 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 	case SMBUS_SIZE_16:
 		ldata = strtoul(arg, &end, 0);
 		if (ldata == LONG_MAX || *end != '\0') {
+			fprintf(stderr,
+				"%s: is LONG_MAX or is followed by junk\n",
+				arg);
 			return -1;
 		}
 		params->data.fixed.u16 = ldata;
 		break;
+	case SMBUS_SIZE_32:
+		ldata = strtoul(arg, &end, 0);
+		if (ldata == LONG_MAX || *end != '\0')
+			return -1;
+		params->data.fixed.u32 = ldata;
+		break;
+	case SMBUS_SIZE_64:
+		ldata = strtoul(arg, &end, 0);
+		if (ldata == LONG_LONG_MAX || *end != '\0')
+			return -1;
+		params->data.fixed.u64 = ldata;
+		break;
 	case SMBUS_SIZE_BLOCK:
 		{
-		int len;
+		uint len;
 		int i;
 		char *err;
 		char str_nibble[3];
 
+		/* arg is assumed to be hex; skip any leading 0x */
+		if (strncasecmp(arg, "0x", 2) == 0)
+			arg += 2;
 		len = strlen(arg);
-		if ( (len <= 0) || (len > 64) || (len % 2 != 0) ) {
+		if (len <= 0 || len > 64 || len % 2 != 0) {
+			fprintf(stderr, "%d: length is 0 or >64 or odd\n", len);
 			return -1;
 		}
 
-		/* null terminate string. */
+		/* NUL-terminate string. */
 		str_nibble[2] = '\0';
+		/* work right-to-left by bytes (nibble pairs) */
 		for (i = len - 2; i >= 0 ; i -= 2) {
 			str_nibble[0] = arg[i];
 			str_nibble[1] = arg[i+1];
+			assert(i/2 >= 0 && i/2 < sizeof params->data.array);
 			params->data.array[i/2] = strtol(str_nibble, &err, 16);
 			if (err[0] != '\0') {
+				fprintf(stderr,
+					"%s in %s: is followed by junk\n",
+					str_nibble, arg);
 				return -1;
 			}
 		}
@@ -272,6 +327,7 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 		}
 		break;
 	default:
+		fprintf(stderr, "%s: unknown operand size\n", arg);
 		return -1;
 	}
 
@@ -298,14 +354,14 @@ smbus_write(int argc, const char *argv[], const struct cmd_info *info)
 	}
 
 	if (parse_io_width(argv[arg_num], &params, op) < 0 ) {
-		fprintf(stderr, "invalid value to write\n");
+		fprintf(stderr, "%s: %s: invalid value to write\n",
+			argv[0], argv[arg_num]);
+		close(params.fd);
 		return -1;
 	}
 
 	ret = op->perform_op(&params, op);
-
 	close(params.fd);
-
 	return ret;
 }
 
@@ -319,7 +375,7 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 	/* Double cast the last argument for compat with klibc. */
 	if (ioctl(params->fd, I2C_SLAVE_FORCE,
 	          (void *)(intptr_t)params->address) < 0) {
-		fprintf(stderr, "can't set address 0x%02X, %s\n",
+		fprintf(stderr, "can't set address 0x%X, %s\n",
 		        params->address, strerror(errno));
 		return -1;
 	}
@@ -332,6 +388,14 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 	case SMBUS_SIZE_16:
 		result = i2c_smbus_write_word_data(params->fd, params->reg,
 		             params->data.fixed.u16);
+		break;
+	case SMBUS_SIZE_32:
+		result = i2c_smbus_write_32_data(params->fd, params->reg,
+		             params->data.fixed.u32);
+		break;
+	case SMBUS_SIZE_64:
+		result = i2c_smbus_write_64_data(params->fd, params->reg,
+		             params->data.fixed.u64);
 		break;
 	case SMBUS_SIZE_BLOCK:
 		result = i2c_smbus_write_block_data(params->fd, params->reg,
@@ -352,10 +416,10 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 
 	if (result < 0) {
 		if (op->size != SMBUS_SIZE_BYTE && op->size != SMBUS_QUICK) {
-			fprintf(stderr, "can't write register 0x%02X, %s\n",
+			fprintf(stderr, "can't write register 0x%X, %s\n",
 			        params->reg, strerror(errno));
 		} else {
-			fprintf(stderr, "can't write to device 0x%02X, %s\n",
+			fprintf(stderr, "can't write to device 0x%X, %s\n",
 			        params->address, strerror(errno));
 		}
 		return -1;
@@ -386,6 +450,8 @@ MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_quick_params, 4,
 
 MAKE_SMBUS_RW_OP(smbus_op_8, 8, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_RW_OP(smbus_op_16, 16, smbus_read_op, smbus_write_op);
+MAKE_SMBUS_RW_OP(smbus_op_32, 32, smbus_read_op, smbus_write_op);
+MAKE_SMBUS_RW_OP(smbus_op_64, 64, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_RW_OP(smbus_op_block, BLOCK, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_RW_OP(smbus_op_byte, BYTE, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_OP(smbus_op_quick, SMBUS_QUICK, smbus_write_op);
@@ -399,6 +465,8 @@ MAKE_SMBUS_OP(smbus_op_quick, SMBUS_QUICK, smbus_write_op);
 static const struct cmd_info smbus_cmds[] = {
 	MAKE_SMBUS_RW_CMDS(8),
 	MAKE_SMBUS_RW_CMDS(16),
+	MAKE_SMBUS_RW_CMDS(32),
+	MAKE_SMBUS_RW_CMDS(64),
 	MAKE_SMBUS_RW_CMDS(block),
 	MAKE_CMD_WITH_PARAMS(smbus_receive_byte, smbus_read,
 	                     &smbus_op_byte_r, &smbus_receive_byte_params),
