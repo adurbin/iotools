@@ -38,7 +38,7 @@
  * in the case where we are building against klibc.  In these cases,
  * dummy up the glibc interfaces.
  */
-#ifndef __CPU_SETSIZE
+#ifdef __KLIBC__
 #define __CPU_SETSIZE	1024
 #define __NCPUBITS	(8 * sizeof (__cpu_mask))
 typedef unsigned long int __cpu_mask;
@@ -66,9 +66,9 @@ static int local_setaffinity(pid_t pid, size_t cpusetsize, cpu_set_t *mask)
 {
 	return sched_setaffinity(pid, cpusetsize, (unsigned long *)mask);
 }
-#else /* ifndef __CPU_SETSIZE */
+#else /* ifdef __KLIBC__ */
 #define local_setaffinity sched_setaffinity
-#endif /* ifndef __CPU_SETSIZE */
+#endif /* ifdef __KLIBC__ */
 
 /* Helper function to set the affinity of the process to a given cpu. */
 static int
