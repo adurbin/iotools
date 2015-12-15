@@ -27,7 +27,7 @@
 #include <assert.h>
 #include <sys/ioctl.h>
 #include "commands.h"
-#include "iotools-i2c-dev.h"
+#include "linux-i2c-dev.h"
 
 enum SMBUS_SIZE
 {
@@ -46,7 +46,7 @@ enum SMBUS_SIZE
 
 typedef union {
 	data_store fixed;
-	uint8_t   array[32];
+	uint8_t   array[I2C_SMBUS_BLOCK_MAX+2];
 } SMBUS_DTYPE;
 
 struct smbus_op_params {
@@ -165,8 +165,10 @@ smbus_read(int argc, const char *argv[], const struct cmd_info *info)
 static int
 smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 {
-	int result;
+	int64_t result;
 
+	errno = 0;
+	memset(&params->data, 0, sizeof(params->data));
 	switch (op->size) {
 	case SMBUS_SIZE_8:
 		result = i2c_smbus_read_byte_data(params->fd, params->reg);
@@ -177,16 +179,21 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 		params->data.fixed.u16 = result;
 		break;
 	case SMBUS_SIZE_32:
-		result = i2c_smbus_read_32_data(params->fd, params->reg);
-		params->data.fixed.u32 = result;
+		result = i2c_smbus_read_i2c_block_data(params->fd, params->reg,
+                	4, (uint8_t *)&params->data.fixed.u32);
+		if (result != 4)
+			result = -1;
 		break;
 	case SMBUS_SIZE_64:
-		result = i2c_smbus_read_64_data(params->fd, params->reg);
-		params->data.fixed.u64 = result;
+		result = i2c_smbus_read_i2c_block_data(params->fd, params->reg,
+                	8, (uint8_t *)&params->data.fixed.u64);
+		if (result != 8)
+			result = -1;
 		break;
 	case SMBUS_SIZE_BLOCK:
+		/* result is number of bytes */
 		result = i2c_smbus_read_block_data(params->fd,
-		             params->reg, params->data.array) - 1;
+		             params->reg, params->data.array);
 		break;
 	case SMBUS_SIZE_BYTE:
 		result = i2c_smbus_read_byte(params->fd);
@@ -228,6 +235,10 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 	case SMBUS_SIZE_BLOCK:
 		{
 		int i;
+
+		--result;
+		if (result > I2C_SMBUS_BLOCK_MAX-1)	/* sanity */
+			result = I2C_SMBUS_BLOCK_MAX-1;
 		for (i=0; i <= result; i++)
 			printf("%02X", params->data.array[i]);
 		printf("\n");
@@ -282,14 +293,18 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 		break;
 	case SMBUS_SIZE_32:
 		ldata = strtoul(arg, &end, 0);
-		if (ldata == LONG_MAX || *end != '\0')
+		if (*end != '\0') {
+			fprintf(stderr, "%s: is followed by junk\n", arg);
 			return -1;
+		}
 		params->data.fixed.u32 = ldata;
 		break;
 	case SMBUS_SIZE_64:
 		ldata = strtoul(arg, &end, 0);
-		if (ldata == LONG_LONG_MAX || *end != '\0')
+		if (*end != '\0') {
+			fprintf(stderr, "%s: is followed by junk\n", arg);
 			return -1;
+		}
 		params->data.fixed.u64 = ldata;
 		break;
 	case SMBUS_SIZE_BLOCK:
@@ -299,9 +314,6 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 		char *err;
 		char str_nibble[3];
 
-		/* arg is assumed to be hex; skip any leading 0x */
-		if (strncasecmp(arg, "0x", 2) == 0)
-			arg += 2;
 		len = strlen(arg);
 		if (len <= 0 || len > 64 || len % 2 != 0) {
 			fprintf(stderr, "%d: length is 0 or >64 or odd\n", len);
@@ -375,7 +387,7 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 	/* Double cast the last argument for compat with klibc. */
 	if (ioctl(params->fd, I2C_SLAVE_FORCE,
 	          (void *)(intptr_t)params->address) < 0) {
-		fprintf(stderr, "can't set address 0x%X, %s\n",
+		fprintf(stderr, "can't set address 0x%02X, %s\n",
 		        params->address, strerror(errno));
 		return -1;
 	}
@@ -390,12 +402,12 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 		             params->data.fixed.u16);
 		break;
 	case SMBUS_SIZE_32:
-		result = i2c_smbus_write_32_data(params->fd, params->reg,
-		             params->data.fixed.u32);
+		result = i2c_smbus_write_i2c_block_data(params->fd, params->reg,
+                	4, (uint8_t *)&params->data.fixed.u32);
 		break;
 	case SMBUS_SIZE_64:
-		result = i2c_smbus_write_64_data(params->fd, params->reg,
-		             params->data.fixed.u64);
+		result = i2c_smbus_write_i2c_block_data(params->fd, params->reg,
+                	8, (uint8_t *)&params->data.fixed.u64);
 		break;
 	case SMBUS_SIZE_BLOCK:
 		result = i2c_smbus_write_block_data(params->fd, params->reg,
@@ -416,10 +428,10 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 
 	if (result < 0) {
 		if (op->size != SMBUS_SIZE_BYTE && op->size != SMBUS_QUICK) {
-			fprintf(stderr, "can't write register 0x%X, %s\n",
+			fprintf(stderr, "can't write register 0x%02X, %s\n",
 			        params->reg, strerror(errno));
 		} else {
-			fprintf(stderr, "can't write to device 0x%X, %s\n",
+			fprintf(stderr, "can't write to device 0x%02X, %s\n",
 			        params->address, strerror(errno));
 		}
 		return -1;
