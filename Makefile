@@ -48,6 +48,7 @@ $(BINARY): $(OBJS) iotools.o Makefile
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ iotools.o $(OBJS)
 
 install: $(BINARY)
+	mkdir -p $(SBINDIR)
 	cp -a $^ $(SBINDIR)
 	$(SBINDIR)/$(BINARY) --make-links
 
