@@ -309,13 +309,13 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 		break;
 	case SMBUS_SIZE_BLOCK:
 		{
-		uint len;
+		int len;
 		int i;
 		char *err;
 		char str_nibble[3];
 
 		len = strlen(arg);
-		if (len <= 0 || len > 64 || len % 2 != 0) {
+		if ( (len <= 0) || (len > 64) || (len % 2 != 0) ) {
 			fprintf(stderr, "%d: length is 0 or >64 or odd\n", len);
 			return -1;
 		}
