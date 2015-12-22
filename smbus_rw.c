@@ -208,10 +208,10 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 	 * otherwise make sure result >= 0 */
 	if (result < 0) {
 		if (op->size != SMBUS_SIZE_BYTE) {
-			fprintf(stderr, "can't read register 0x%X, %s\n",
+			fprintf(stderr, "can't read register 0x%02X, %s\n",
 			        params->reg, strerror(errno));
 		} else {
-			fprintf(stderr, "can't read from device 0x%X, %s\n",
+			fprintf(stderr, "can't read from device 0x%02X, %s\n",
 			        params->address, strerror(errno));
 		}
 		return -1;
