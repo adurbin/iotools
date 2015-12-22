@@ -1,0 +1,30 @@
+About
+
+The iotools package provides a set of simple command line tools which allow
+access to hardware device registers. Supported register interfaces include PCI, IO, memory mapped IO, SMBus, CPUID, and MSR. Also included are some utilities
+which allow for simple arithmetic, logical, and other operations.
+
+If you ever have to debug hardware, you could probably use these tools.
+
+Building
+
+iotools currently does not use an autoconf script or anything similar to build.
+iotools has only been tested to run and build on Linux. Additionally, it is
+assumed that gcc is being used to build. In order to build iotools, one just
+has to type 'make.'
+
+There are a few options that can be used during the build.
+
+DEBUG - If set to 1, debugging symbols will be generated in the binaries. The
+build currently turns this option on if the DEBUG variable has not been
+assigned.
+
+STATIC - If set to 1, the binary is linked statically. The build currently
+turns this option on if the STATIC variable has not been assigned.
+
+CROSS_COMPILE - This variable can be set to a path of another gcc. The build
+will use the compiler pointed to by CROSS_COMPILE.
+
+There is a 'rinstall' build target that will scp the iotools binary to a remote
+system defined by the RHOST variable. RUSER can be defined to login with RUSER
+to perform the copy. If RUSER is not defined, RUSER defaults to 'root.'
