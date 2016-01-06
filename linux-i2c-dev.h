@@ -137,12 +137,14 @@ union i2c_smbus_data {
 #define I2C_SMBUS_WORD_DATA	    3
 #define I2C_SMBUS_PROC_CALL	    4
 #define I2C_SMBUS_BLOCK_DATA	    5
-#define I2C_SMBUS_I2C_BLOCK_DATA    6
+#define I2C_SMBUS_I2C_BLOCK_BROKEN  6
 #define I2C_SMBUS_BLOCK_PROC_CALL   7		/* SMBus 2.0 */
-#define I2C_SMBUS_BLOCK_DATA_PEC    8		/* SMBus 2.0 */
-#define I2C_SMBUS_PROC_CALL_PEC     9		/* SMBus 2.0 */
-#define I2C_SMBUS_BLOCK_PROC_CALL_PEC  10	/* SMBus 2.0 */
-#define I2C_SMBUS_WORD_DATA_PEC	   11		/* SMBus 2.0 */
+#define I2C_SMBUS_I2C_BLOCK_DATA    8
+#define I2C_SMBUS_I2C_PROC_CALL     9
+#define I2C_SMBUS_BLOCK_DATA_PEC   10		/* SMBus 2.0 */
+#define I2C_SMBUS_PROC_CALL_PEC    11		/* SMBus 2.0 */
+#define I2C_SMBUS_BLOCK_PROC_CALL_PEC  12	/* SMBus 2.0 */
+#define I2C_SMBUS_WORD_DATA_PEC	   13		/* SMBus 2.0 */
 
 
 /* ----- commands for the ioctl like i2c_command call:
@@ -310,10 +312,14 @@ static inline __s32 i2c_smbus_write_block_data(int file, __u8 command,
 
 /* Returns the number of read bytes */
 static inline __s32 i2c_smbus_read_i2c_block_data(int file, __u8 command,
-                                                  __u8 *values)
+                                                  __u8 length, __u8 *values)
 {
 	union i2c_smbus_data data;
 	int i;
+
+	if (length > 32)
+		length = 32;
+	data.block[0] = length;
 	if (i2c_smbus_access(file,I2C_SMBUS_READ,command,
 	                      I2C_SMBUS_I2C_BLOCK_DATA,&data))
 		return -1;
