@@ -30,10 +30,12 @@
 
 enum SMBUS_SIZE
 {
-	/* The following 3 transactions issue a register address preceding the
+	/* The following 5 transactions issue a register address preceding the
 	 * transaction. In SMBus lingo, this is "command code." */
 	SMBUS_SIZE_8  = SIZE8,
 	SMBUS_SIZE_16 = SIZE16,
+	SMBUS_SIZE_32 = SIZE32,		/* new in smbus 3 */
+	SMBUS_SIZE_64 = SIZE64,
 	SMBUS_SIZE_BLOCK,
 	/* This transaction does not issue a register address. */
 	SMBUS_SIZE_BYTE,
@@ -43,7 +45,7 @@ enum SMBUS_SIZE
 
 typedef union {
 	data_store fixed;
-	uint8_t   array[32];
+	uint8_t   array[I2C_SMBUS_BLOCK_MAX+2];
 } SMBUS_DTYPE;
 
 struct smbus_op_params {
@@ -155,7 +157,7 @@ smbus_read(int argc, const char *argv[], const struct cmd_info *info)
 static int
 smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 {
-	int result;
+	int64_t result;
 
 	switch (op->size) {
 	case SMBUS_SIZE_8:
@@ -166,9 +168,22 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 		result = i2c_smbus_read_word_data(params->fd, params->reg);
 		params->data.fixed.u16 = result;
 		break;
+	case SMBUS_SIZE_32:
+		result = i2c_smbus_read_i2c_block_data(params->fd, params->reg,
+                	4, (uint8_t *)&params->data.fixed.u32);
+		if (result != 4)
+			result = -1;
+		break;
+	case SMBUS_SIZE_64:
+		result = i2c_smbus_read_i2c_block_data(params->fd, params->reg,
+                	8, (uint8_t *)&params->data.fixed.u64);
+		if (result != 8)
+			result = -1;
+		break;
 	case SMBUS_SIZE_BLOCK:
+		/* result is number of bytes */
 		result = i2c_smbus_read_block_data(params->fd,
-		             params->reg, params->data.array) - 1;
+		             params->reg, params->data.array);
 		break;
 	case SMBUS_SIZE_BYTE:
 		result = i2c_smbus_read_byte(params->fd);
@@ -201,9 +216,19 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 	case SMBUS_SIZE_16:
 		printf("0x%04X\n", params->data.fixed.u16);
 		break;
+	case SMBUS_SIZE_32:
+		printf("0x%08X\n", params->data.fixed.u32);
+		break;
+	case SMBUS_SIZE_64:
+		printf("0x%016lX\n", params->data.fixed.u64);
+		break;
 	case SMBUS_SIZE_BLOCK:
 		{
 		int i;
+
+		--result;
+		if (result > I2C_SMBUS_BLOCK_MAX-1)	/* sanity */
+			result = I2C_SMBUS_BLOCK_MAX-1;
 		for (i=0; i <= result; i++)
 			printf("%02X", params->data.array[i]);
 		printf("\n");
@@ -218,7 +243,7 @@ static int
 parse_io_width(const char *arg, struct smbus_op_params *params,
                const struct smbus_op *op)
 {
-	unsigned long ldata;
+	uint64_t ldata;
 	char *end;
 
 	switch (op->size) {
@@ -245,6 +270,22 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 			return -1;
 		}
 		params->data.fixed.u16 = ldata;
+		break;
+	case SMBUS_SIZE_32:
+		ldata = strtoul(arg, &end, 0);
+		if (*end != '\0') {
+			fprintf(stderr, "%s: is followed by junk\n", arg);
+			return -1;
+		}
+		params->data.fixed.u32 = ldata;
+		break;
+	case SMBUS_SIZE_64:
+		ldata = strtoul(arg, &end, 0);
+		if (*end != '\0') {
+			fprintf(stderr, "%s: is followed by junk\n", arg);
+			return -1;
+		}
+		params->data.fixed.u64 = ldata;
 		break;
 	case SMBUS_SIZE_BLOCK:
 		{
@@ -333,6 +374,14 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 		result = i2c_smbus_write_word_data(params->fd, params->reg,
 		             params->data.fixed.u16);
 		break;
+	case SMBUS_SIZE_32:
+		result = i2c_smbus_write_i2c_block_data(params->fd, params->reg,
+                	4, (uint8_t *)&params->data.fixed.u32);
+		break;
+	case SMBUS_SIZE_64:
+		result = i2c_smbus_write_i2c_block_data(params->fd, params->reg,
+                	8, (uint8_t *)&params->data.fixed.u64);
+		break;
 	case SMBUS_SIZE_BLOCK:
 		result = i2c_smbus_write_block_data(params->fd, params->reg,
 		             params->len, params->data.array);
@@ -386,6 +435,8 @@ MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_quick_params, 4,
 
 MAKE_SMBUS_RW_OP(smbus_op_8, 8, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_RW_OP(smbus_op_16, 16, smbus_read_op, smbus_write_op);
+MAKE_SMBUS_RW_OP(smbus_op_32, 32, smbus_read_op, smbus_write_op);
+MAKE_SMBUS_RW_OP(smbus_op_64, 64, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_RW_OP(smbus_op_block, BLOCK, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_RW_OP(smbus_op_byte, BYTE, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_OP(smbus_op_quick, SMBUS_QUICK, smbus_write_op);
@@ -399,6 +450,8 @@ MAKE_SMBUS_OP(smbus_op_quick, SMBUS_QUICK, smbus_write_op);
 static const struct cmd_info smbus_cmds[] = {
 	MAKE_SMBUS_RW_CMDS(8),
 	MAKE_SMBUS_RW_CMDS(16),
+	MAKE_SMBUS_RW_CMDS(32),
+	MAKE_SMBUS_RW_CMDS(64),
 	MAKE_SMBUS_RW_CMDS(block),
 	MAKE_CMD_WITH_PARAMS(smbus_receive_byte, smbus_read,
 	                     &smbus_op_byte_r, &smbus_receive_byte_params),
