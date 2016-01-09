@@ -220,16 +220,15 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 		printf("0x%08X\n", params->data.fixed.u32);
 		break;
 	case SMBUS_SIZE_64:
-		printf("0x%016lX\n", params->data.fixed.u64);
+		printf("0x%016llX\n", (long long)params->data.fixed.u64);
 		break;
 	case SMBUS_SIZE_BLOCK:
 		{
 		int i;
 
-		--result;
-		if (result > I2C_SMBUS_BLOCK_MAX-1)	/* sanity */
-			result = I2C_SMBUS_BLOCK_MAX-1;
-		for (i=0; i <= result; i++)
+		if (result > I2C_SMBUS_BLOCK_MAX)	/* sanity */
+			result = I2C_SMBUS_BLOCK_MAX;
+		for (i=0; i < result; i++)
 			printf("%02X", params->data.array[i]);
 		printf("\n");
 		}
@@ -280,7 +279,7 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 		params->data.fixed.u32 = ldata;
 		break;
 	case SMBUS_SIZE_64:
-		ldata = strtoul(arg, &end, 0);
+		ldata = strtoull(arg, &end, 0);
 		if (*end != '\0') {
 			fprintf(stderr, "%s: is followed by junk\n", arg);
 			return -1;
