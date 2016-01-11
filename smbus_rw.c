@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <assert.h>
 #include <sys/ioctl.h>
 #include "commands.h"
 #include "linux-i2c-dev.h"
@@ -95,6 +96,12 @@ parse_uint8(const char *arg, uint8_t *ret)
 
 	ldata = strtoul(arg, &end, 0);
 	if (ldata == LONG_MAX || *end != '\0') {
+		fprintf(stderr, "%s: is LONG_MAX or is followed by junk\n",
+			arg);
+		return -1;
+	}
+	if (ldata > 0xff) {
+		fprintf(stderr, "%s: won't fit in a byte\n", arg);
 		return -1;
 	}
 	*ret = (uint8_t)ldata;
@@ -108,6 +115,7 @@ static int
 smbus_prologue(const char *argv[], struct smbus_op_params *params,
                const struct smbus_op *op)
 {
+	params->fd = -1;		/* in case of early return */
 	if (parse_uint8(argv[1], &params->i2c_bus)) {
 		fprintf(stderr, "invalid adapter value\n");
 		return -1;
@@ -128,7 +136,7 @@ smbus_prologue(const char *argv[], struct smbus_op_params *params,
 
 	params->fd = open_i2c_slave(params->i2c_bus, params->address);
 	if (params->fd < 0) {
-		fprintf(stderr, "can't get slave\n");
+		fprintf(stderr, "can't open slave\n");
 		return -1;
 	}
 
@@ -159,6 +167,8 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 {
 	int64_t result;
 
+	errno = 0;
+	memset(&params->data, 0, sizeof(params->data));
 	switch (op->size) {
 	case SMBUS_SIZE_8:
 		result = i2c_smbus_read_byte_data(params->fd, params->reg);
@@ -249,8 +259,12 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 	case SMBUS_QUICK:
 		ldata = strtoul(arg, &end, 0);
 		if (ldata == LONG_MAX || *end != '\0') {
+			fprintf(stderr,
+				"%s: is LONG_MAX or is followed by junk\n",
+				arg);
 			return -1;
 		} else if (ldata != 0 && ldata != 1) {
+			fprintf(stderr, "%s: isn't 0 or 1\n", arg);
 			return -1;
 		}
 		params->data.fixed.u8 = ldata;
@@ -259,6 +273,9 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 	case SMBUS_SIZE_8:
 		ldata = strtoul(arg, &end, 0);
 		if (ldata == LONG_MAX || *end != '\0') {
+			fprintf(stderr,
+				"%s: is LONG_MAX or is followed by junk\n",
+				arg);
 			return -1;
 		}
 		params->data.fixed.u8 = ldata;
@@ -266,6 +283,9 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 	case SMBUS_SIZE_16:
 		ldata = strtoul(arg, &end, 0);
 		if (ldata == LONG_MAX || *end != '\0') {
+			fprintf(stderr,
+				"%s: is LONG_MAX or is followed by junk\n",
+				arg);
 			return -1;
 		}
 		params->data.fixed.u16 = ldata;
@@ -295,16 +315,22 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 
 		len = strlen(arg);
 		if ( (len <= 0) || (len > 64) || (len % 2 != 0) ) {
+			fprintf(stderr, "%d: length is 0 or >64 or odd\n", len);
 			return -1;
 		}
 
-		/* null terminate string. */
+		/* NUL-terminate string. */
 		str_nibble[2] = '\0';
+		/* work right-to-left by bytes (nibble pairs) */
 		for (i = len - 2; i >= 0 ; i -= 2) {
 			str_nibble[0] = arg[i];
 			str_nibble[1] = arg[i+1];
+			assert(i/2 >= 0 && i/2 < sizeof params->data.array);
 			params->data.array[i/2] = strtol(str_nibble, &err, 16);
 			if (err[0] != '\0') {
+				fprintf(stderr,
+					"%s in %s: is followed by junk\n",
+					str_nibble, arg);
 				return -1;
 			}
 		}
@@ -312,6 +338,7 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 		}
 		break;
 	default:
+		fprintf(stderr, "%s: unknown operand size\n", arg);
 		return -1;
 	}
 
@@ -338,14 +365,14 @@ smbus_write(int argc, const char *argv[], const struct cmd_info *info)
 	}
 
 	if (parse_io_width(argv[arg_num], &params, op) < 0 ) {
-		fprintf(stderr, "invalid value to write\n");
+		fprintf(stderr, "%s: %s: invalid value to write\n",
+			argv[0], argv[arg_num]);
+		close(params.fd);
 		return -1;
 	}
 
 	ret = op->perform_op(&params, op);
-
 	close(params.fd);
-
 	return ret;
 }
 
