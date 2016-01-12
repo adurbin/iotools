@@ -89,17 +89,34 @@ open_i2c_slave(unsigned char i2c_bus, unsigned char slave_address)
 }
 
 static int
+istrailingjunk(const char *arg, char *end)
+{
+	if (*end != '\0') {
+		fprintf(stderr, "%s: is followed by junk\n", arg);
+		return -1;
+	}
+	return 0;
+}
+
+static int
+ismaxortrailingjunk(const char *arg, char *end, unsigned long ldata)
+{
+	if (ldata == LONG_MAX) {
+		fprintf(stderr, "%s: is LONG_MAX\n", arg);
+		return -1;
+	}
+	return istrailingjunk(arg, end);
+}
+
+static int
 parse_uint8(const char *arg, uint8_t *ret)
 {
 	unsigned long ldata;
 	char *end;
 
 	ldata = strtoul(arg, &end, 0);
-	if (ldata == LONG_MAX || *end != '\0') {
-		fprintf(stderr, "%s: is LONG_MAX or is followed by junk\n",
-			arg);
+	if (ismaxortrailingjunk(arg, end, ldata))
 		return -1;
-	}
 	if (ldata > 0xff) {
 		fprintf(stderr, "%s: won't fit in a byte\n", arg);
 		return -1;
@@ -115,7 +132,6 @@ static int
 smbus_prologue(const char *argv[], struct smbus_op_params *params,
                const struct smbus_op *op)
 {
-	params->fd = -1;		/* in case of early return */
 	if (parse_uint8(argv[1], &params->i2c_bus)) {
 		fprintf(stderr, "invalid adapter value\n");
 		return -1;
@@ -167,7 +183,6 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 {
 	int64_t result;
 
-	errno = 0;
 	memset(&params->data, 0, sizeof(params->data));
 	switch (op->size) {
 	case SMBUS_SIZE_8:
@@ -258,12 +273,9 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 	switch (op->size) {
 	case SMBUS_QUICK:
 		ldata = strtoul(arg, &end, 0);
-		if (ldata == LONG_MAX || *end != '\0') {
-			fprintf(stderr,
-				"%s: is LONG_MAX or is followed by junk\n",
-				arg);
+		if (ismaxortrailingjunk(arg, end, ldata))
 			return -1;
-		} else if (ldata != 0 && ldata != 1) {
+		if (ldata != 0 && ldata != 1) {
 			fprintf(stderr, "%s: isn't 0 or 1\n", arg);
 			return -1;
 		}
@@ -272,45 +284,32 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 	case SMBUS_SIZE_BYTE:
 	case SMBUS_SIZE_8:
 		ldata = strtoul(arg, &end, 0);
-		if (ldata == LONG_MAX || *end != '\0') {
-			fprintf(stderr,
-				"%s: is LONG_MAX or is followed by junk\n",
-				arg);
+		if (ismaxortrailingjunk(arg, end, ldata))
 			return -1;
-		}
 		params->data.fixed.u8 = ldata;
 		break;
 	case SMBUS_SIZE_16:
 		ldata = strtoul(arg, &end, 0);
-		if (ldata == LONG_MAX || *end != '\0') {
-			fprintf(stderr,
-				"%s: is LONG_MAX or is followed by junk\n",
-				arg);
+		if (ismaxortrailingjunk(arg, end, ldata))
 			return -1;
-		}
 		params->data.fixed.u16 = ldata;
 		break;
 	case SMBUS_SIZE_32:
 		ldata = strtoul(arg, &end, 0);
-		if (*end != '\0') {
-			fprintf(stderr, "%s: is followed by junk\n", arg);
+		if (istrailingjunk(arg, end))
 			return -1;
-		}
 		params->data.fixed.u32 = ldata;
 		break;
 	case SMBUS_SIZE_64:
 		ldata = strtoull(arg, &end, 0);
-		if (*end != '\0') {
-			fprintf(stderr, "%s: is followed by junk\n", arg);
+		if (istrailingjunk(arg, end))
 			return -1;
-		}
 		params->data.fixed.u64 = ldata;
 		break;
 	case SMBUS_SIZE_BLOCK:
 		{
 		int len;
 		int i;
-		char *err;
 		char str_nibble[3];
 
 		len = strlen(arg);
@@ -326,13 +325,9 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 			str_nibble[0] = arg[i];
 			str_nibble[1] = arg[i+1];
 			assert(i/2 >= 0 && i/2 < sizeof params->data.array);
-			params->data.array[i/2] = strtol(str_nibble, &err, 16);
-			if (err[0] != '\0') {
-				fprintf(stderr,
-					"%s in %s: is followed by junk\n",
-					str_nibble, arg);
+			if (parse_uint8(str_nibble, &params->data.array[i/2]))
+				/* parse_uint8 has complained */
 				return -1;
-			}
 		}
 		params->len = len / 2;
 		}
