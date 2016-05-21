@@ -109,22 +109,33 @@ ismaxortrailingjunk(const char *arg, char *end, unsigned long ldata)
 }
 
 static int
-parse_uint8(const char *arg, uint8_t *ret)
+parse_uint8_base(const char *arg, uint8_t *ret, int base)
 {
-	unsigned long ldata;
-	char *end;
+        unsigned long ldata;
+        char *end;
 
-	ldata = strtoul(arg, &end, 0);
-	if (ismaxortrailingjunk(arg, end, ldata))
-		return -1;
-	if (ldata > 0xff) {
-		fprintf(stderr, "%s: won't fit in a byte\n", arg);
-		return -1;
-	}
-	*ret = (uint8_t)ldata;
-	return 0;
+        ldata = strtoul(arg, &end, base);
+        if (ismaxortrailingjunk(arg, end, ldata))
+                return -1;
+        if (ldata > 0xff) {
+                fprintf(stderr, "%s: won't fit in a byte\n", arg);
+                return -1;
+        }
+        *ret = (uint8_t)ldata;
+        return 0;
 }
 
+static int
+parse_uint8(const char *arg, uint8_t *ret)
+{
+        return parse_uint8_base(arg, ret, 0);
+}
+
+static int
+parse_uint8_hex(const char *arg, uint8_t *ret)
+{
+        return parse_uint8_base(arg, ret, 16);
+}
 /* smbus_prologue is responsible for doing the common bits for both smbus read
  * and write. It will parse the comand line arguments and open the appropriate
  * i2c device. It returns 1 on success, 0 on failure. */
@@ -268,7 +279,6 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
                const struct smbus_op *op)
 {
 	uint64_t ldata;
-	char *err;
 	char *end;
 
 	switch (op->size) {
@@ -323,16 +333,14 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 		/* NUL-terminate string. */
 		str_nibble[2] = '\0';
 		/* work by bytes (nibble pairs) */
-		for (i = 0; i < len; i += 2) {
-			str_nibble[0] = arg[i];
-			str_nibble[1] = arg[i+1];
-			params->data.array[i/2] = strtoul(str_nibble, &err, 16);
-			if (err[0] != '\0') {
-				fprintf(stderr, "Invalid hex byte %s\n", str_nibble);
-				return -1;
-			}
-		}
-		params->len = len / 2;
+                /* work right-to-left by bytes (nibble pairs) */
+                for (i = len - 2; i >= 0 ; i -= 2) {
+                        str_nibble[0] = arg[i];
+                        str_nibble[1] = arg[i+1];
+                        if (parse_uint8_hex(str_nibble, &params->data.array[i/2]))
+                                /* parse_uint8_hex has complained */
+                                return -1;
+                }		params->len = len / 2;
 		}
 		break;
 	default:
