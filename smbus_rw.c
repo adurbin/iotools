@@ -340,7 +340,8 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
                         if (parse_uint8_hex(str_nibble, &params->data.array[i/2]))
                                 /* parse_uint8_hex has complained */
                                 return -1;
-                }		params->len = len / 2;
+                }
+                params->len = len / 2;
 		}
 		break;
 	default:
