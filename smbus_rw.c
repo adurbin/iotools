@@ -333,7 +333,7 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 		/* NUL-terminate string. */
 		str_nibble[2] = '\0';
 		/* work by bytes (nibble pairs) */
-                /* work right-to-left by bytes (nibble pairs) */
+                /* work right-to-left by bytes (nibble pairs)  */
                 for (i = len - 2; i >= 0 ; i -= 2) {
                         str_nibble[0] = arg[i];
                         str_nibble[1] = arg[i+1];
