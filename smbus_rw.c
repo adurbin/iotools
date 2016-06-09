@@ -313,23 +313,32 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 		char str_nibble[3];
 
 		len = strlen(arg);
-		if ( (len <= 0) || (len > 64) || (len % 2 != 0) ) {
-			fprintf(stderr, "%d: length is 0 or >64 or odd\n", len);
+		if ((len < 2) || (len % 2 != 0) || (len/2 > I2C_SMBUS_BLOCK_MAX) ) {
+			fprintf(stderr, "length %d is 0 or > %d or odd\n",
+				len, I2C_SMBUS_BLOCK_MAX);
 			return -1;
 		}
+		/* Allow data starting with 0x */
+		if (arg[0] == '0' && (arg[1] == 'x' || arg[1] == 'X')) {
+			arg += 2;
+			len -= 2;
+			if (!len) {
+				fprintf(stderr, "no digits after 0x prefix\n");
+				return -1;
+			}
+		}
+		params->len = len / 2;
 
 		/* NUL-terminate string. */
 		str_nibble[2] = '\0';
 		/* work by bytes (nibble pairs) */
-		for (i = 0; i < len; i += 2) {
-			str_nibble[0] = arg[i];
-			str_nibble[1] = arg[i+1];
-			assert(i/2 >= 0 && i/2 < sizeof params->data.array);
-			if (parse_uint8(str_nibble, &params->data.array[i/2]))
+		for (i = 0; i < params->len; ++i) {
+			str_nibble[0] = arg[2*i];
+			str_nibble[1] = arg[2*i+1];
+			if (parse_uint8(str_nibble, &params->data.array[i]))
 				/* parse_uint8 has complained */
 				return -1;
 		}
-		params->len = len / 2;
 		}
 		break;
 	default:
