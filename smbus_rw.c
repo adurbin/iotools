@@ -318,15 +318,10 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 			return -1;
 		}
 
-		/* Allow data starting with 0x */
-		i = 0;
-		if (arg[0] == '0' && (arg[1] == 'x' || arg[1] == 'X')) {
-			i = 2;
-		}
 		/* NUL-terminate string. */
 		str_nibble[2] = '\0';
 		/* work by bytes (nibble pairs) */
-		for (; i < len; i += 2) {
+		for (i = 0; i < len; i += 2) {
 			str_nibble[0] = arg[i];
 			str_nibble[1] = arg[i+1];
 			assert(i/2 >= 0 && i/2 < sizeof params->data.array);
