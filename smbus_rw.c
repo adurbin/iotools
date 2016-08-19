@@ -283,6 +283,7 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 	uint64_t ldata;
 	char *end;
 
+	memset(params->data.array, 0, sizeof(params->data.array));
 	switch (op->size) {
 	case SMBUS_QUICK:
 		ldata = strtoul(arg, &end, 0);
@@ -322,28 +323,37 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 	case SMBUS_SIZE_BLOCK:
 		{
 		int len;
-		int i;
+		const char *src = arg;
+		uint8_t *dest;
 		char str_nibble[3];
 
 		len = strlen(arg);
-		if ((len <= 0) || (len/2 > I2C_SMBUS_BLOCK_MAX) ||
-			(len % 2 != 0)) {
-			fprintf(stderr, "%d: length 0 or > %d bytes or odd\n",
-				len, I2C_SMBUS_BLOCK_MAX);
+		if ((len <= 0) || (len % 2 != 0)) {
+			fprintf(stderr, "data length (%d) is 0 or odd\n", len);
 			return -1;
 		}
 
-		/* NUL-terminate string. */
+		if (arg[0] == '0' && (arg[1] == 'x' || arg[1] == 'X')) {
+			src = &arg[2];
+			len -= 2;
+		}
+
+		if (len/2 > I2C_SMBUS_BLOCK_MAX) {
+			fprintf(stderr, "data has more than %d bytes\n",
+				I2C_SMBUS_BLOCK_MAX);
+			return -1;
+		}
+
+		/* NUL-terminate nibble. */
 		str_nibble[2] = '\0';
 		/* work by bytes (nibble pairs) */
-		for (i = 0; i < len; i += 2) {
-			str_nibble[0] = arg[i];
-			str_nibble[1] = arg[i+1];
-			assert(i/2 >= 0 && i/2 < sizeof params->data.array);
-			if (parse_uint8_hex(str_nibble,
-				&params->data.array[i/2]))
+		for (dest = params->data.array; src[0] != '\0'; dest++) {
+			str_nibble[0] = src[0];
+			str_nibble[1] = src[1];
+			if (parse_uint8_hex(str_nibble, dest))
 				/* parse_uint8_hex has complained */
 				return -1;
+			src += 2;
 		}
 		params->len = len / 2;
 		}
