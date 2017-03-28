@@ -16,16 +16,16 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <assert.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 #include "commands.h"
 #include "linux-i2c-dev.h"
 
@@ -42,6 +42,8 @@ enum SMBUS_SIZE
 	SMBUS_SIZE_BYTE,
 	/* Quick transactions. */
 	SMBUS_QUICK,
+	SMBUS_PROC_CALL,
+	SMBUS_BLOCK_PROC_CALL,
 };
 
 typedef union {
@@ -73,13 +75,15 @@ open_i2c_slave(unsigned char i2c_bus, unsigned char slave_address)
 	sprintf(devfile, "/dev/i2c-%d", i2c_bus);
 	fd = open(devfile, O_RDWR);
 	if (fd < 0) {
-		printf("Couldn't open i2c device file: %s\n", strerror(errno));
+		fprintf(stderr, "Couldn't open i2c device file: %s\n",
+			strerror(errno));
 		return -1;
 	}
 
 	/* Double cast the last argument for compat with klibc. */
 	if (ioctl(fd, I2C_SLAVE, (void *)(intptr_t)slave_address) < 0) {
-		printf("Could not attach to i2c bus %d slave address %d: %s\n",
+		fprintf(stderr,
+			"Could not attach to i2c bus %d slave address %d: %s\n",
 		       i2c_bus, slave_address, strerror(errno));
 		close(fd);
 		return -1;
@@ -137,6 +141,127 @@ parse_uint8_hex(const char *arg, uint8_t *ret)
 	return parse_uint8_base(arg, ret, 16);
 }
 
+static int
+parse_io_width(const char *arg, struct smbus_op_params *params,
+	       const struct smbus_op *op) {
+	uint64_t ldata;
+	char *end;
+
+	memset(params->data.array, 0, sizeof(params->data.array));
+	switch (op->size) {
+	case SMBUS_QUICK:
+		ldata = strtoul(arg, &end, 0);
+		if (ismaxortrailingjunk(arg, end, ldata))
+			return -1;
+		if (ldata != 0 && ldata != 1) {
+			fprintf(stderr, "%s: isn't 0 or 1\n", arg);
+			return -1;
+		}
+		params->data.fixed.u8 = ldata;
+		break;
+	case SMBUS_SIZE_BYTE:
+	case SMBUS_SIZE_8:
+		ldata = strtoul(arg, &end, 0);
+		if (ismaxortrailingjunk(arg, end, ldata))
+			return -1;
+		params->data.fixed.u8 = ldata;
+		break;
+	case SMBUS_SIZE_16:
+	case SMBUS_PROC_CALL:
+		ldata = strtoul(arg, &end, 0);
+		if (ismaxortrailingjunk(arg, end, ldata))
+			return -1;
+		params->data.fixed.u16 = ldata;
+		break;
+	case SMBUS_SIZE_32:
+		ldata = strtoul(arg, &end, 0);
+		if (istrailingjunk(arg, end))
+			return -1;
+		params->data.fixed.u32 = ldata;
+		break;
+	case SMBUS_SIZE_64:
+		ldata = strtoull(arg, &end, 0);
+		if (istrailingjunk(arg, end))
+			return -1;
+		params->data.fixed.u64 = ldata;
+		break;
+	case SMBUS_SIZE_BLOCK:
+	case SMBUS_BLOCK_PROC_CALL:
+		{
+		int len;
+		const char *src = arg;
+		uint8_t *dest;
+		char str_nibble[3];
+
+		len = strlen(arg);
+		if ((len <= 0) || (len % 2 != 0)) {
+			fprintf(stderr, "data length (%d) is 0 or odd\n", len);
+			return -1;
+		}
+
+		if (arg[0] == '0' && (arg[1] == 'x' || arg[1] == 'X')) {
+			src = &arg[2];
+			len -= 2;
+		}
+
+		if (len / 2 > I2C_SMBUS_BLOCK_MAX) {
+			fprintf(stderr, "data has more than %d bytes\n",
+				I2C_SMBUS_BLOCK_MAX);
+			return -1;
+		}
+
+		/* NUL-terminate nibble. */
+		str_nibble[2] = '\0';
+		/* work by bytes (nibble pairs) */
+		for (dest = params->data.array; src[0] != '\0'; dest++) {
+			str_nibble[0] = src[0];
+			str_nibble[1] = src[1];
+			if (parse_uint8_hex(str_nibble, dest))
+				/* parse_uint8_hex has complained */
+				return -1;
+			src += 2;
+		}
+		params->len = len / 2;
+		}
+		break;
+	default:
+		fprintf(stderr, "%s: unknown operand size\n", arg);
+		return -1;
+	}
+
+	return 0;
+}
+
+/* print out the data read. */
+static void
+print_read_data(int size, int read_block_size, SMBUS_DTYPE *data) {
+	switch (size) {
+	case SMBUS_SIZE_BYTE:
+	case SMBUS_SIZE_8:
+		printf("0x%02X\n", data->fixed.u8);
+		break;
+	case SMBUS_SIZE_16:
+		printf("0x%04X\n", data->fixed.u16);
+		break;
+	case SMBUS_SIZE_32:
+		printf("0x%08X\n", data->fixed.u32);
+		break;
+	case SMBUS_SIZE_64:
+		printf("0x%016llX\n", (long long)data->fixed.u64);
+		break;
+	case SMBUS_SIZE_BLOCK:
+		{
+		int i;
+
+		if (read_block_size > I2C_SMBUS_BLOCK_MAX) /* sanity */
+			read_block_size = I2C_SMBUS_BLOCK_MAX;
+		for (i = 0; i < read_block_size; i++)
+			printf("%02X", data->array[i]);
+		printf("\n");
+		}
+		break;
+	}
+}
 
 /* smbus_prologue is responsible for doing the common bits for both smbus read
  * and write. It will parse the comand line arguments and open the appropriate
@@ -220,8 +345,8 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 		break;
 	case SMBUS_SIZE_BLOCK:
 		/* result is number of bytes */
-		result = i2c_smbus_read_block_data(params->fd,
-		             params->reg, params->data.array);
+		result = i2c_smbus_read_block_data(params->fd, params->reg,
+		                                   params->data.array);
 		break;
 	case SMBUS_SIZE_BYTE:
 		result = i2c_smbus_read_byte(params->fd);
@@ -245,124 +370,7 @@ smbus_read_op(struct smbus_op_params *params, const struct smbus_op *op)
 		return -1;
 	}
 
-	/* print out the data read. */
-	switch (op->size) {
-	case SMBUS_SIZE_BYTE:
-	case SMBUS_SIZE_8:
-		printf("0x%02X\n", params->data.fixed.u8);
-		break;
-	case SMBUS_SIZE_16:
-		printf("0x%04X\n", params->data.fixed.u16);
-		break;
-	case SMBUS_SIZE_32:
-		printf("0x%08X\n", params->data.fixed.u32);
-		break;
-	case SMBUS_SIZE_64:
-		printf("0x%016llX\n", (long long)params->data.fixed.u64);
-		break;
-	case SMBUS_SIZE_BLOCK:
-		{
-		int i;
-
-		if (result > I2C_SMBUS_BLOCK_MAX)	/* sanity */
-			result = I2C_SMBUS_BLOCK_MAX;
-		for (i=0; i < result; i++)
-			printf("%02X", params->data.array[i]);
-		printf("\n");
-		}
-		break;
-	}
-
-	return 0;
-}
-
-static int
-parse_io_width(const char *arg, struct smbus_op_params *params,
-               const struct smbus_op *op)
-{
-	uint64_t ldata;
-	char *end;
-
-	memset(params->data.array, 0, sizeof(params->data.array));
-	switch (op->size) {
-	case SMBUS_QUICK:
-		ldata = strtoul(arg, &end, 0);
-		if (ismaxortrailingjunk(arg, end, ldata))
-			return -1;
-		if (ldata != 0 && ldata != 1) {
-			fprintf(stderr, "%s: isn't 0 or 1\n", arg);
-			return -1;
-		}
-		params->data.fixed.u8 = ldata;
-		break;
-	case SMBUS_SIZE_BYTE:
-	case SMBUS_SIZE_8:
-		ldata = strtoul(arg, &end, 0);
-		if (ismaxortrailingjunk(arg, end, ldata))
-			return -1;
-		params->data.fixed.u8 = ldata;
-		break;
-	case SMBUS_SIZE_16:
-		ldata = strtoul(arg, &end, 0);
-		if (ismaxortrailingjunk(arg, end, ldata))
-			return -1;
-		params->data.fixed.u16 = ldata;
-		break;
-	case SMBUS_SIZE_32:
-		ldata = strtoul(arg, &end, 0);
-		if (istrailingjunk(arg, end))
-			return -1;
-		params->data.fixed.u32 = ldata;
-		break;
-	case SMBUS_SIZE_64:
-		ldata = strtoull(arg, &end, 0);
-		if (istrailingjunk(arg, end))
-			return -1;
-		params->data.fixed.u64 = ldata;
-		break;
-	case SMBUS_SIZE_BLOCK:
-		{
-		int len;
-		const char *src = arg;
-		uint8_t *dest;
-		char str_nibble[3];
-
-		len = strlen(arg);
-		if ((len <= 0) || (len % 2 != 0)) {
-			fprintf(stderr, "data length (%d) is 0 or odd\n", len);
-			return -1;
-		}
-
-		if (arg[0] == '0' && (arg[1] == 'x' || arg[1] == 'X')) {
-			src = &arg[2];
-			len -= 2;
-		}
-
-		if (len/2 > I2C_SMBUS_BLOCK_MAX) {
-			fprintf(stderr, "data has more than %d bytes\n",
-				I2C_SMBUS_BLOCK_MAX);
-			return -1;
-		}
-
-		/* NUL-terminate nibble. */
-		str_nibble[2] = '\0';
-		/* work by bytes (nibble pairs) */
-		for (dest = params->data.array; src[0] != '\0'; dest++) {
-			str_nibble[0] = src[0];
-			str_nibble[1] = src[1];
-			if (parse_uint8_hex(str_nibble, dest))
-				/* parse_uint8_hex has complained */
-				return -1;
-			src += 2;
-		}
-		params->len = len / 2;
-		}
-		break;
-	default:
-		fprintf(stderr, "%s: unknown operand size\n", arg);
-		return -1;
-	}
-
+	print_read_data(op->size, result, &params->data);
 	return 0;
 }
 
@@ -460,6 +468,85 @@ smbus_write_op(struct smbus_op_params *params, const struct smbus_op *op)
 	return 0;
 }
 
+/* Used for both process_call and block_process_call */
+static int
+smbus_process_call(int argc, const char *argv[], const struct cmd_info *info)
+{
+	int ret;
+	struct smbus_op_params params;
+	const struct smbus_op *op = (const struct smbus_op *)info->privdata;
+
+	if (smbus_prologue(argv, &params, op) < 0) {
+		return -1;
+	}
+
+	if (parse_io_width(argv[4], &params, op) < 0) {
+		fprintf(stderr, "%s: %s: invalid value to write\n",
+		        argv[0], argv[4]);
+		close(params.fd);
+		return -1;
+	}
+
+	ret = op->perform_op(&params, op);
+
+	close(params.fd);
+
+	return ret;
+}
+
+static int
+smbus_process_call_op(struct smbus_op_params *params,
+                      const struct smbus_op *op)
+{
+	int result;
+
+	if (ioctl(params->fd, I2C_SLAVE_FORCE,
+	          (void *)(intptr_t)params->address) < 0) {
+		fprintf(stderr, "can't set address 0x%02X, %s\n",
+		        params->address, strerror(errno));
+		return -1;
+	}
+
+	result = i2c_smbus_process_call(params->fd, params->reg,
+	                                params->data.fixed.u16);
+	if (result < 0) {
+		fprintf(stderr, "SMBUS Process call failed: %s.\n",
+		        strerror(errno));
+		return -1;
+	}
+
+	print_read_data(SMBUS_SIZE_16, 0, &params->data);
+	return 0;
+}
+
+static int
+smbus_block_process_call_op(struct smbus_op_params *params,
+			    const struct smbus_op *op)
+{
+	int read_block_size;
+
+	if (ioctl(params->fd, I2C_SLAVE_FORCE,
+	          (void *)(intptr_t)params->address) < 0) {
+		fprintf(stderr, "can't set address 0x%02X, %s\n",
+		        params->address, strerror(errno));
+		return -1;
+	}
+
+	/* returns number of read bytes */
+	read_block_size = i2c_smbus_block_process_call(params->fd, params->reg,
+	                                               params->len,
+	                                               params->data.array);
+
+	if (read_block_size < 0) {
+		fprintf(stderr, "SMBUS Process call failed: %s.\n",
+		        strerror(errno));
+		return -1;
+	}
+
+	print_read_data(SMBUS_SIZE_BLOCK, read_block_size, &params->data);
+	return 0;
+}
+
 MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_read_params, 4,
 	"<adapter> <address> <register>", 0);
 MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_write_params, 5,
@@ -487,6 +574,9 @@ MAKE_SMBUS_RW_OP(smbus_op_64, 64, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_RW_OP(smbus_op_block, BLOCK, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_RW_OP(smbus_op_byte, BYTE, smbus_read_op, smbus_write_op);
 MAKE_SMBUS_OP(smbus_op_quick, SMBUS_QUICK, smbus_write_op);
+MAKE_SMBUS_OP(smbus_op_proc_call, SMBUS_PROC_CALL, smbus_process_call_op);
+MAKE_SMBUS_OP(smbus_op_block_proc_call, SMBUS_BLOCK_PROC_CALL,
+              smbus_block_process_call_op);
 
 #define MAKE_SMBUS_RW_CMDS(size_) \
 	MAKE_CMD_WITH_PARAMS(smbus_read ##size_, smbus_read, \
@@ -506,6 +596,10 @@ static const struct cmd_info smbus_cmds[] = {
 	                     &smbus_op_byte_w, &smbus_send_byte_params),
 	MAKE_CMD_WITH_PARAMS(smbus_quick, smbus_write,
 	                     &smbus_op_quick, &smbus_quick_params),
+	MAKE_CMD_WITH_PARAMS(smbus_process_call, smbus_process_call,
+	                     &smbus_op_proc_call, &smbus_write_params),
+	MAKE_CMD_WITH_PARAMS(smbus_block_process_call, smbus_process_call,
+	                     &smbus_op_block_proc_call, &smbus_write_params),
 };
 
 MAKE_CMD_GROUP(SMBus, "commands to access the system management bus",
