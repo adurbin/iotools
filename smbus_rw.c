@@ -56,6 +56,7 @@ struct smbus_op_params {
 	uint8_t reg;
 	uint8_t i2c_bus;
 	uint8_t address;
+	uint8_t read_count;
 	int len;
 	SMBUS_DTYPE data;
 };
@@ -547,6 +548,74 @@ smbus_block_process_call_op(struct smbus_op_params *params,
 	return 0;
 }
 
+static int
+smbus_writeread(int argc, const char *argv[], const struct cmd_info *info)
+{
+	int ret;
+	struct smbus_op_params params;
+	memset(&params, 0, sizeof(params));
+	const struct smbus_op *op = (const struct smbus_op *)info->privdata;
+
+	if (smbus_prologue(argv, &params, op) < 0) {
+		return -1;
+	}
+
+	if(parse_uint8(argv[3], &params.read_count) < 0) {
+		fprintf(stderr, "invalid read count %s.\n", argv[4]);
+		return -1;
+	}
+	if (params.read_count > I2C_SMBUS_BLOCK_MAX) {
+		fprintf(stderr, "read count %s > %d.\n",
+			argv[3], I2C_SMBUS_BLOCK_MAX);
+		return -1;
+	}
+	if (parse_io_width(argv[4], &params, op) < 0) {
+		fprintf(stderr, "%s: %s: invalid value to write\n",
+		        argv[0], argv[4]);
+		close(params.fd);
+		return -1;
+	}
+
+	ret = op->perform_op(&params, op);
+
+	close(params.fd);
+
+	return ret;
+}
+
+static int
+smbus_writeread_op(struct smbus_op_params *params, const struct smbus_op *op)
+{
+	struct i2c_msg msg[2];
+	struct i2c_rdwr_ioctl_data data;
+
+	/* First transfer: write the params bytes */
+	msg[0].addr  = params->address;
+	msg[0].flags = 0;
+	msg[0].len   = params->len;
+	msg[0].buf   = (char*) params->data.array;
+
+	/* Second transfer: read `read_count` bytes */
+	msg[1].addr  = params->address;
+	msg[1].flags = I2C_M_RD;
+	msg[1].len   = params->read_count;
+	msg[1].buf   = (char*) params->data.array;
+
+	/* Run the transfers */
+	data.msgs  = msg;
+	data.nmsgs = 2;
+	int rv = ioctl(params->fd, I2C_RDWR, &data);
+
+	/* Error check */
+	if (rv < 0) {
+		fprintf(stderr, "I2C_RDWR failed: %s\n", strerror(errno));
+		return -1;
+	}
+
+	print_read_data(SMBUS_SIZE_BLOCK, params->read_count, &params->data);
+	return 0;
+}
+
 MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_read_params, 4,
 	"<adapter> <address> <register>", 0);
 MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_write_params, 5,
@@ -557,6 +626,8 @@ MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_send_byte_params, 4,
 	"<adapter> <address> <value>", 0);
 MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_quick_params, 4,
 	"<adapter> <address> <0|1>", 0);
+MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_writeread_params, 5,
+	"<adapter> <address> <read_count> <write_value>", 0);
 
 #define MAKE_SMBUS_OP(name_, size_, fn_) \
 	static const struct smbus_op name_ = { \
@@ -577,6 +648,7 @@ MAKE_SMBUS_OP(smbus_op_quick, SMBUS_QUICK, smbus_write_op);
 MAKE_SMBUS_OP(smbus_op_proc_call, SMBUS_PROC_CALL, smbus_process_call_op);
 MAKE_SMBUS_OP(smbus_op_block_proc_call, SMBUS_BLOCK_PROC_CALL,
               smbus_block_process_call_op);
+MAKE_SMBUS_OP(smbus_op_writeread, SMBUS_SIZE_BLOCK, smbus_writeread_op);
 
 #define MAKE_SMBUS_RW_CMDS(size_) \
 	MAKE_CMD_WITH_PARAMS(smbus_read ##size_, smbus_read, \
@@ -600,6 +672,8 @@ static const struct cmd_info smbus_cmds[] = {
 	                     &smbus_op_proc_call, &smbus_write_params),
 	MAKE_CMD_WITH_PARAMS(smbus_block_process_call, smbus_process_call,
 	                     &smbus_op_block_proc_call, &smbus_write_params),
+	MAKE_CMD_WITH_PARAMS(smbus_writeread, smbus_writeread,
+	                     &smbus_op_writeread, &smbus_writeread_params),
 };
 
 MAKE_CMD_GROUP(SMBus, "commands to access the system management bus",
