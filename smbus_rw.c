@@ -44,6 +44,7 @@ enum SMBUS_SIZE
 	SMBUS_QUICK,
 	SMBUS_PROC_CALL,
 	SMBUS_BLOCK_PROC_CALL,
+	SMBUS_WRITE_READ,
 };
 
 typedef union {
@@ -188,6 +189,7 @@ parse_io_width(const char *arg, struct smbus_op_params *params,
 		break;
 	case SMBUS_SIZE_BLOCK:
 	case SMBUS_BLOCK_PROC_CALL:
+	case SMBUS_WRITE_READ:
 		{
 		int len;
 		const char *src = arg;
@@ -282,7 +284,9 @@ smbus_prologue(const char *argv[], struct smbus_op_params *params,
 
 	/* Only obtain the register if size designates that it is not a byte
 	 * or quick operation. */
-	if (op->size != SMBUS_SIZE_BYTE && op->size != SMBUS_QUICK) {
+	if (op->size != SMBUS_SIZE_BYTE &&
+	    op->size != SMBUS_QUICK &&
+	    op->size != SMBUS_WRITE_READ) {
 		if (parse_uint8(argv[3], &params->reg)) {
 			fprintf(stderr, "invalid register value\n");
 			return -1;
@@ -560,7 +564,13 @@ smbus_writeread(int argc, const char *argv[], const struct cmd_info *info)
 		return -1;
 	}
 
-	if(parse_uint8(argv[3], &params.read_count) < 0) {
+	if (parse_io_width(argv[3], &params, op) < 0) {
+		fprintf(stderr, "%s: %s: invalid value to write\n",
+		        argv[0], argv[3]);
+		close(params.fd);
+		return -1;
+	}
+	if(parse_uint8(argv[4], &params.read_count) < 0) {
 		fprintf(stderr, "invalid read count %s.\n", argv[4]);
 		return -1;
 	}
@@ -569,13 +579,6 @@ smbus_writeread(int argc, const char *argv[], const struct cmd_info *info)
 			argv[3], I2C_SMBUS_BLOCK_MAX);
 		return -1;
 	}
-	if (parse_io_width(argv[4], &params, op) < 0) {
-		fprintf(stderr, "%s: %s: invalid value to write\n",
-		        argv[0], argv[4]);
-		close(params.fd);
-		return -1;
-	}
-
 	ret = op->perform_op(&params, op);
 
 	close(params.fd);
@@ -627,7 +630,7 @@ MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_send_byte_params, 4,
 MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_quick_params, 4,
 	"<adapter> <address> <0|1>", 0);
 MAKE_PREREQ_PARAMS_FIXED_ARGS(smbus_writeread_params, 5,
-	"<adapter> <address> <read_count> <write_value>", 0);
+	"<adapter> <address> <write_value> <read_count>", 0);
 
 #define MAKE_SMBUS_OP(name_, size_, fn_) \
 	static const struct smbus_op name_ = { \
@@ -648,7 +651,7 @@ MAKE_SMBUS_OP(smbus_op_quick, SMBUS_QUICK, smbus_write_op);
 MAKE_SMBUS_OP(smbus_op_proc_call, SMBUS_PROC_CALL, smbus_process_call_op);
 MAKE_SMBUS_OP(smbus_op_block_proc_call, SMBUS_BLOCK_PROC_CALL,
               smbus_block_process_call_op);
-MAKE_SMBUS_OP(smbus_op_writeread, SMBUS_SIZE_BLOCK, smbus_writeread_op);
+MAKE_SMBUS_OP(smbus_op_writeread, SMBUS_WRITE_READ, smbus_writeread_op);
 
 #define MAKE_SMBUS_RW_CMDS(size_) \
 	MAKE_CMD_WITH_PARAMS(smbus_read ##size_, smbus_read, \
