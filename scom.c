@@ -35,22 +35,27 @@
 #include "commands.h"
 #include "platform.h"
 
+static off64_t xscom_mangle_addr(off64_t addr)
+{
+	 off64_t tmp;
+
+	 /*
+	  * Shift the top 4 bits (indirect mode) down by 4 bits so we
+	  * don't lose going through the debugfs interfaces.
+	  */
+	 tmp = (addr & 0xf000000000000000) >> 4;
+	 addr &= 0x00ffffffffffffff;
+	 addr |= tmp;
+
+	 /* Shift up by 3 for debugfs */
+	 return addr << 3;
+}
+
 static int
 open_and_seek(int chip, uint64_t scom, int mode, int *fd)
 {
 	char dev[512];
-	/* Shift scom address to align to 8 byte boundary, mask high bit */
-	off64_t offset = (scom & ((1ULL << 63) - 1)) << 3;
-	/* Handle high bit (indirect SCOM) by shifting the bit right one bit.
-	   File offsets are signed, and this is how the kernel expects us to
-	   mangle it.
-	   Note we set bit 62 instead of bit 59 because of a bug in the kernel
-	   scom.c that shifts the whole value right 3 before looking for
-	   bit 59 set.
-	*/
-	if (scom & (1ULL << 63)) {
-		offset |= 1ULL << 62;
-	}
+	off64_t offset = xscom_mangle_addr(scom);
 
 	snprintf(dev, sizeof(dev), "/sys/kernel/debug/powerpc/scom/%08x/access",
 	         chip);
