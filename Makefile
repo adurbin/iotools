@@ -17,7 +17,7 @@
 VER_MAJOR = 1
 VER_MINOR = 6
 
-CC=$(CROSS_COMPILE)gcc
+CC ?= $(CROSS_COMPILE)gcc
 
 # build options
 DEBUG ?= 1
